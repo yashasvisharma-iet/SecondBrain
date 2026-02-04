@@ -1,0 +1,55 @@
+############################
+# Node / Frontend
+############################
+node_modules/
+dist/
+build/
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+############################
+# Python / Backend
+############################
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+############################
+# Spring Boot / Java
+############################
+target/
+out/
+*.class
+*.log
+
+# Maven / Gradle
+.mvn/wrapper/maven-wrapper.jar
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+############################
+# IDEs
+############################
+.idea/
+.vscode/
+*.iml
+
+############################
+# Env / Secrets
+############################
+.env
+.env.*
+application-local.yml
+application-dev.yml
+
+############################
+# OS junk
+############################
+.DS_Store
+Thumbs.db
