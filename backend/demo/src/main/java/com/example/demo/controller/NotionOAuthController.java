@@ -12,9 +12,11 @@ import java.util.Map;
 public class NotionOAuthController {
 
     private final NotionOAuthService notionOAuthService;
+    private final com.example.demo.service.NotionIngestionService ingestionService;
 
-    public NotionOAuthController(NotionOAuthService notionOAuthService) {
+    public NotionOAuthController(NotionOAuthService notionOAuthService, com.example.demo.service.NotionIngestionService ingestionService) {
         this.notionOAuthService = notionOAuthService;
+        this.ingestionService = ingestionService;
     }
 
     @PostMapping("/callback")
@@ -26,7 +28,19 @@ public class NotionOAuthController {
             return ResponseEntity.badRequest().build();
         }
 
-        notionOAuthService.exchangeCode(code);
+        String workspaceId = notionOAuthService.exchangeCode(code);
+
+        // optional pageId in body: if provided, kick off ingestion immediately
+        String pageId = body.get("pageId");
+        if (pageId != null && !pageId.isBlank()) {
+            try {
+                ingestionService.ingestPage(workspaceId, pageId);
+            } catch (Exception e) {
+                // don't fail the oauth callback if ingestion fails
+                System.err.println("Ingestion after OAuth failed: " + e.getMessage());
+            }
+        }
+
         return ResponseEntity.ok().build();
     }
 }

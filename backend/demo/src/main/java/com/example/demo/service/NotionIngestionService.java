@@ -20,14 +20,17 @@ public class NotionIngestionService {
 
     private final NotionTokenRepository tokenRepository;
     private final NotionPageContentRepository contentRepository;
+    private final ChunkingService chunkingService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     public NotionIngestionService(
             NotionTokenRepository tokenRepository,
-            NotionPageContentRepository contentRepository
+            NotionPageContentRepository contentRepository,
+            ChunkingService chunkingService
     ) {
         this.tokenRepository = tokenRepository;
         this.contentRepository = contentRepository;
+        this.chunkingService = chunkingService;
     }
 
     public void ingestPage(String workspaceId, String pageId) {
@@ -55,7 +58,16 @@ public class NotionIngestionService {
         pageContent.setContent(text);
         pageContent.setSyncedAt(Instant.now());
 
-        contentRepository.save(pageContent);
+        NotionPageContent saved = contentRepository.save(pageContent);
+
+        // trigger chunking synchronously for now
+        try {
+            chunkingService.chunkNote(saved.getId());
+        } catch (Exception e) {
+            // log and continue; chunking should not break ingestion
+            // use System.err to avoid bringing in logger here
+            System.err.println("Chunking failed for pageId=" + pageId + ": " + e.getMessage());
+        }
     }
 
     // ---------------- helpers ----------------

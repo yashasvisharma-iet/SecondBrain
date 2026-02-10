@@ -35,7 +35,7 @@ public class NotionOAuthService {
         this.tokenRepository = tokenRepository;
     }
 
-    public void exchangeCode(String code) {
+    public String exchangeCode(String code) {
         RestTemplate restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
@@ -111,6 +111,7 @@ public class NotionOAuthService {
                 log.warn("Found and removed {} duplicate NotionToken records for workspaceId={}", toDelete.size(), workspaceId);
             }
         }
+        return workspaceId;
     }
 
     private String formatJson(String prefix, String json) {

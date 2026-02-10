@@ -7,7 +7,7 @@ import { Routes, Route } from "react-router-dom";
 import Splash from "./components/Splash";
 // import Login from "./components/Login";
 // import Signup from "./components/Signup";
-import Feed from "./pages/Feed";
+import {Feed} from "./pages/Feed";
 import Onboarding from "./components/Onboarding";
 import NotionCallback from "./pages/auth/NotionCallback";
 
