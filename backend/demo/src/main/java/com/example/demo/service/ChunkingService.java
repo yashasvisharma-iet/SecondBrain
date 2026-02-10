@@ -29,9 +29,11 @@ public class ChunkingService {
     @Transactional
     public void chunkNote(Long rawNoteId) {
         if (rawNoteId == null) return;
-
+        // Always remove existing chunks for this raw note and re-chunk based on current content.
+        // This ensures updated or oversized documents are re-processed instead of being skipped
+        // because chunks already exist.
         if (chunkRepo.existsByRawNoteId(rawNoteId)) {
-            return; // idempotent
+            chunkRepo.deleteByRawNoteId(rawNoteId);
         }
 
         NotionPageContent page = pageRepo.findById(rawNoteId)

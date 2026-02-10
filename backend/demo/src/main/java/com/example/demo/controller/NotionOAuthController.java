@@ -33,11 +33,22 @@ public class NotionOAuthController {
         // optional pageId in body: if provided, kick off ingestion immediately
         String pageId = body.get("pageId");
         if (pageId != null && !pageId.isBlank()) {
+            System.out.println("NotionOAuthController: received pageId in callback, triggering ingestion for pageId=" + pageId + " workspaceId=" + workspaceId);
             try {
                 ingestionService.ingestPage(workspaceId, pageId);
-            } catch (Exception e) {
-                // don't fail the oauth callback if ingestion fails
+              } catch (Exception e) {
+                
                 System.err.println("Ingestion after OAuth failed: " + e.getMessage());
+                e.printStackTrace(System.err);
+            }
+        } else {
+            System.out.println("NotionOAuthController: no pageId provided in OAuth callback; ingesting recent pages instead.");
+            try {
+                // ingest a few recent pages from the workspace so the user has some content indexed
+                ingestionService.ingestRecentPages(workspaceId, 5);
+            } catch (Exception e) {
+                System.err.println("Ingestion of recent pages after OAuth failed: " + e.getMessage());
+                e.printStackTrace(System.err);
             }
         }
 

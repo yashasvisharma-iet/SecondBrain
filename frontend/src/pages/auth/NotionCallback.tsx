@@ -32,11 +32,14 @@ export default function NotionCallback() {
     sessionStorage.setItem(handledKey, "1");
 
     //call the backend to exchange code for token and save connection
+    //If a pageId was stored prior to redirect (optional), send it so server can kick off ingestion
+    const optionalPageId = sessionStorage.getItem('notion_selected_pageId');
+
     fetch("http://localhost:8080/api/oauth/notion/callback", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ code }),
+      body: JSON.stringify({ code, pageId: optionalPageId ?? undefined }),
     })
       .then(async (res) => {
         if (!res.ok) throw new Error();

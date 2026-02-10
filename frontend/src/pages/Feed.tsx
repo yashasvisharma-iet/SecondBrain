@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 
 import { GraphView } from '@/components/GraphView'
 import { type GraphData } from '@/components/GraphTypes'
@@ -76,6 +76,37 @@ export function Feed() {
       nodes: [...noteNodes, ...chunkNodes],
       edges: [...noteToChunkEdges, ...semanticEdges],
     }
+  }, [notes])
+
+  // When the graph view is created/notes change, send raw note content to backend
+  // so it can be stored and chunked on the server. We de-duplicate per-note using sessionStorage
+  // to avoid re-sending on hot reloads during the same session.
+  useEffect(() => {
+    // small helper to POST raw content
+    const ingestNote = async (note: Note) => {
+      try {
+        const handledKey = `ingested_note_${note.id}`;
+        if (sessionStorage.getItem(handledKey)) return;
+
+        // skip empty content
+        if (!note.content) return;
+
+        await fetch('http://localhost:8080/api/notion/ingestRaw', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ pageId: note.id, content: note.content }),
+        })
+        // mark handled regardless of response to avoid retries in this session
+        sessionStorage.setItem(handledKey, '1');
+      } catch (e) {
+        // ignore errors for now; ingestion is best-effort from frontend
+        console.error('Failed to ingest note', note.id, e);
+      }
+    }
+
+    // fire-and-forget for each note
+    notes.forEach((n) => void ingestNote(n));
   }, [notes])
 
   const handleAddFolder = () => {

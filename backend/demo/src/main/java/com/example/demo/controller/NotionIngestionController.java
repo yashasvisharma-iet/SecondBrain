@@ -32,6 +32,20 @@ public class NotionIngestionController {
         return ResponseEntity.ok("Page ingested successfully");
     }
 
+    @PostMapping("/ingestRaw")
+    public ResponseEntity<String> ingestRawFromFrontend(@RequestBody java.util.Map<String, String> body) {
+        String pageId = body.get("pageId");
+        String content = body.get("content");
+
+        if (pageId == null || pageId.isBlank() || content == null) {
+            return ResponseEntity.badRequest().body("pageId and content are required");
+        }
+
+        ingestionService.ingestRawContent(pageId, content);
+
+        return ResponseEntity.ok("Raw content ingested for pageId=" + pageId);
+    }
+
     @PostMapping("/rechunk")
     public ResponseEntity<String> rechunkByRawNoteId(@RequestParam Long rawNoteId) {
         chunkingService.chunkNote(rawNoteId);
