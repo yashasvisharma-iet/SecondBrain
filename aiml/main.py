@@ -5,18 +5,13 @@ from typing import List
 import numpy as np
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from sklearn.feature_extraction.text import HashingVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
-app = FastAPI(title="SecondBrain AIML", version="0.1.0")
+app = FastAPI(title="SecondBrain AIML", version="0.2.0")
 
-# Stateless vectorizer keeps service lightweight and dependency-free from model downloads.
-vectorizer = HashingVectorizer(
-    n_features=2048,
-    alternate_sign=False,
-    ngram_range=(1, 2),
-    norm="l2",
-)
+# Small sentence-transformer provides semantic embeddings while keeping inference lightweight.
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+embedding_model = SentenceTransformer(MODEL_NAME)
 
 
 class ChunkInput(BaseModel):
@@ -42,7 +37,7 @@ class SimilarityResponse(BaseModel):
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", "model": MODEL_NAME}
 
 
 @app.post("/relations", response_model=SimilarityResponse)
@@ -52,8 +47,8 @@ def relations(payload: SimilarityRequest) -> SimilarityResponse:
         return SimilarityResponse(edges=[])
 
     corpus = [chunk.content for chunk in chunks]
-    matrix = vectorizer.transform(corpus)
-    similarities = cosine_similarity(matrix)
+    embeddings = embedding_model.encode(corpus, normalize_embeddings=True)
+    similarities = np.matmul(embeddings, embeddings.T)
 
     edges: list[SimilarityEdge] = []
     n = len(chunks)
