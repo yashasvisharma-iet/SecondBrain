@@ -1,0 +1,10 @@
+# Spring datasource (set in your real application.properties)
+# spring.datasource.url=jdbc:postgresql://localhost:5432/secondbrain
+# spring.datasource.username=...
+# spring.datasource.password=...
+
+# AIML FastAPI endpoint for semantic relationships
+aiml.base-url=http://localhost:8001
+
+# cosine similarity threshold for creating chunk-to-chunk semantic edges
+semantic.threshold=0.8
