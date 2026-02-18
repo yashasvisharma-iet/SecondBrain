@@ -20,3 +20,6 @@ uvicorn main:app --host 0.0.0.0 --port 8001
 - `POST /relations`
   - Input: chunks + threshold
   - Output: cross-note semantic edges with cosine similarity scores.
+- `POST /embeddings`
+  - Input: list of texts
+  - Output: normalized embedding vectors (MiniLM 384-dim) for pgvector storage.

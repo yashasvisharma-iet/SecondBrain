@@ -35,6 +35,14 @@ class SimilarityResponse(BaseModel):
     edges: List[SimilarityEdge]
 
 
+class EmbeddingRequest(BaseModel):
+    texts: List[str] = Field(default_factory=list)
+
+
+class EmbeddingResponse(BaseModel):
+    embeddings: List[List[float]]
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "model": MODEL_NAME}
@@ -72,3 +80,13 @@ def relations(payload: SimilarityRequest) -> SimilarityResponse:
                 )
 
     return SimilarityResponse(edges=edges)
+
+
+@app.post("/embeddings", response_model=EmbeddingResponse)
+def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
+    texts = [text if text is not None else "" for text in payload.texts]
+    if not texts:
+        return EmbeddingResponse(embeddings=[])
+
+    vectors = embedding_model.encode(texts, normalize_embeddings=True)
+    return EmbeddingResponse(embeddings=np.asarray(vectors, dtype=float).tolist())
