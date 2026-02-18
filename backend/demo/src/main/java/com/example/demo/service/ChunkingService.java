@@ -15,15 +15,21 @@ public class ChunkingService {
     private final NotionPageContentRepository pageRepo;
     private final TextChunkRepository chunkRepo;
     private final TextChunker chunker;
+    private final AimlEmbeddingClient aimlEmbeddingClient;
+    private final PostgresVectorStoreService vectorStoreService;
 
     public ChunkingService(
             NotionPageContentRepository pageRepo,
             TextChunkRepository chunkRepo,
-            TextChunker chunker
+            TextChunker chunker,
+            AimlEmbeddingClient aimlEmbeddingClient,
+            PostgresVectorStoreService vectorStoreService
     ) {
         this.pageRepo = pageRepo;
         this.chunkRepo = chunkRepo;
         this.chunker = chunker;
+        this.aimlEmbeddingClient = aimlEmbeddingClient;
+        this.vectorStoreService = vectorStoreService;
     }
 
     @Transactional
@@ -35,6 +41,7 @@ public class ChunkingService {
         if (chunkRepo.existsByRawNoteId(rawNoteId)) {
             chunkRepo.deleteByRawNoteId(rawNoteId);
         }
+        vectorStoreService.deleteByRawNoteId(rawNoteId);
 
         NotionPageContent page = pageRepo.findById(rawNoteId)
                 .orElseThrow(() -> new IllegalArgumentException("NotionPageContent not found: " + rawNoteId));
@@ -42,12 +49,22 @@ public class ChunkingService {
         List<String> chunks = chunker.chunk(page.getContent());
 
         int index = 0;
+        List<TextChunk> savedChunks = new java.util.ArrayList<>();
         for (String content : chunks) {
             TextChunk chunk = new TextChunk();
             chunk.setRawNoteId(rawNoteId);
             chunk.setChunkIndex(index++);
             chunk.setContent(content);
-            chunkRepo.save(chunk);
+            savedChunks.add(chunkRepo.save(chunk));
+        }
+
+        List<List<Double>> embeddings = aimlEmbeddingClient.buildEmbeddings(
+                savedChunks.stream().map(TextChunk::getContent).toList()
+        );
+
+        int paired = Math.min(savedChunks.size(), embeddings.size());
+        for (int i = 0; i < paired; i++) {
+            vectorStoreService.upsertChunkEmbedding(savedChunks.get(i), embeddings.get(i));
         }
     }
 }

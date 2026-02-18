@@ -2,6 +2,8 @@ package com.example.demo.service;
 
 import com.example.demo.dto.AimlRelationRequest;
 import com.example.demo.dto.AimlRelationResponse;
+import com.example.demo.dto.AimlEmbeddingRequest;
+import com.example.demo.dto.AimlEmbeddingResponse;
 import com.example.demo.dto.GraphEdgeDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -41,6 +43,30 @@ public class AimlEmbeddingClient {
             return body == null || body.edges() == null ? List.of() : body.edges();
         } catch (RestClientException ex) {
             System.err.println("AIML relation service unavailable, continuing without semantic edges: " + ex.getMessage());
+            return List.of();
+        }
+    }
+
+    public List<List<Double>> buildEmbeddings(List<String> texts) {
+        if (texts == null || texts.isEmpty()) {
+            return List.of();
+        }
+
+        try {
+            RequestEntity<AimlEmbeddingRequest> request = RequestEntity
+                    .post(URI.create(baseUrl + "/embeddings"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new AimlEmbeddingRequest(texts));
+
+            ResponseEntity<AimlEmbeddingResponse> response = restTemplate.exchange(
+                    request,
+                    AimlEmbeddingResponse.class
+            );
+
+            AimlEmbeddingResponse body = response.getBody();
+            return body == null || body.embeddings() == null ? List.of() : body.embeddings();
+        } catch (RestClientException ex) {
+            System.err.println("AIML embedding service unavailable, skipping vector persistence: " + ex.getMessage());
             return List.of();
         }
     }
