@@ -1,17 +1,17 @@
 from __future__ import annotations
 
+import os
 from typing import List
 
 import numpy as np
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from openai import OpenAI
 from pydantic import BaseModel, Field
-from sentence_transformers import SentenceTransformer
 
 app = FastAPI(title="SecondBrain AIML", version="0.2.0")
 
-# Small sentence-transformer provides semantic embeddings while keeping inference lightweight.
-MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-embedding_model = SentenceTransformer(MODEL_NAME)
+MODEL_NAME = "text-embedding-3-small"
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 class ChunkInput(BaseModel):
@@ -43,9 +43,25 @@ class EmbeddingResponse(BaseModel):
     embeddings: List[List[float]]
 
 
+def _normalize_embeddings(vectors: list[list[float]]) -> np.ndarray:
+    array = np.asarray(vectors, dtype=float)
+    norms = np.linalg.norm(array, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return array / norms
+
+
+def _embed_texts(texts: list[str]) -> np.ndarray:
+    if not os.getenv("OPENAI_API_KEY"):
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is required")
+
+    response = openai_client.embeddings.create(model=MODEL_NAME, input=texts)
+    vectors = [item.embedding for item in response.data]
+    return _normalize_embeddings(vectors)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "model": MODEL_NAME}
+    return {"status": "ok", "model": MODEL_NAME, "provider": "openai"}
 
 
 @app.post("/relations", response_model=SimilarityResponse)
@@ -55,7 +71,7 @@ def relations(payload: SimilarityRequest) -> SimilarityResponse:
         return SimilarityResponse(edges=[])
 
     corpus = [chunk.content for chunk in chunks]
-    embeddings = embedding_model.encode(corpus, normalize_embeddings=True)
+    embeddings = _embed_texts(corpus)
     similarities = np.matmul(embeddings, embeddings.T)
 
     edges: list[SimilarityEdge] = []
@@ -88,5 +104,5 @@ def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
     if not texts:
         return EmbeddingResponse(embeddings=[])
 
-    vectors = embedding_model.encode(texts, normalize_embeddings=True)
-    return EmbeddingResponse(embeddings=np.asarray(vectors, dtype=float).tolist())
+    vectors = _embed_texts(texts)
+    return EmbeddingResponse(embeddings=vectors.tolist())
