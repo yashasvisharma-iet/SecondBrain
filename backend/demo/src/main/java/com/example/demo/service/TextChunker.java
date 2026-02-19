@@ -1,6 +1,6 @@
 package com.example.demo.service;
 
-import com.example.demo.config.ChunkingConfig;
+
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -12,11 +12,11 @@ public class TextChunker {
 
     private final int MAX_CHARS;
     private final int MIN_CHARS;
-
-    public TextChunker(ChunkingConfig cfg) {
-        this.MAX_CHARS = cfg.getMaxChars();
-        this.MIN_CHARS = cfg.getMinChars();
+    public TextChunker() {
+        this.MAX_CHARS = 1000;
+        this.MIN_CHARS = 200;
     }
+
 
     public List<String> chunk(String rawText) {
         if (rawText == null || rawText.isBlank()) {

@@ -1,13 +1,14 @@
 ############################
 # Node / Frontend
 ############################
+pytorch mini projects
 node_modules/
 dist/
 build/
 .vite/
 npm-debug.log*
 yarn-error.log*
-pnpm-debug.log*
+pnpm-debug.log*rom yashasvisharma-iet/codex
 
 ############################
 # Python / Backend

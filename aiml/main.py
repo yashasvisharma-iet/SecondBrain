@@ -67,9 +67,10 @@ def health() -> dict[str, str]:
 @app.post("/relations", response_model=SimilarityResponse)
 def relations(payload: SimilarityRequest) -> SimilarityResponse:
     chunks = [chunk for chunk in payload.chunks if chunk.content and chunk.content.strip()]
-    if len(chunks) < 2:
-        return SimilarityResponse(edges=[])
+    # if len(chunks) < 2:
+    #     return SimilarityResponse(edges=[])
 
+    #embeds all chunks 
     corpus = [chunk.content for chunk in chunks]
     embeddings = _embed_texts(corpus)
     similarities = np.matmul(embeddings, embeddings.T)
