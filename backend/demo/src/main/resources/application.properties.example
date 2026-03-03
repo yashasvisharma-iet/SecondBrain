@@ -3,12 +3,15 @@
 # spring.datasource.username=...
 # spring.datasource.password=...
 
-# AIML FastAPI endpoint for semantic relationships
+# AIML FastAPI endpoint for embeddings
 aiml.base-url=http://localhost:8001
 
-# pgvector storage for chunk embeddings
-vector.store.table=text_chunk_embedding
+# Pinecone storage for chunk embeddings and similarity query
+pinecone.api-key=YOUR_PINECONE_API_KEY
+pinecone.index-host=https://YOUR_INDEX_HOST.svc.YOUR_ENV.pinecone.io
+pinecone.namespace=secondbrain
 vector.store.dimensions=384
 
-# cosine similarity threshold for creating chunk-to-chunk semantic edges
+# cosine similarity threshold + max matches per chunk for chunk-to-chunk semantic edges
 semantic.threshold=0.8
+semantic.top-k=8
