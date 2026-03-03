@@ -14,7 +14,7 @@ public class TextChunker {
     private final int MIN_CHARS;
     public TextChunker() {
         this.MAX_CHARS = 1000;
-        this.MIN_CHARS = 200;
+        this.MIN_CHARS = 50;
     }
 
 

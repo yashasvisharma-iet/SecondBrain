@@ -45,6 +45,10 @@ class GraphServiceTests {
         assertThat(data.nodes()).extracting("type").contains("note", "chunk");
         assertThat(data.edges()).anyMatch(e -> e.score() == null && e.source().equals("n1") && e.target().equals("c-10"));
         assertThat(data.edges()).anyMatch(e -> e.score() != null && e.score() >= 0.8);
+
+
+        System.out.println("Nodes: " + data.nodes());
+        System.out.println("Edges: " + data.edges());
     }
 
     private void setId(NotionPageContent page, Long id) {

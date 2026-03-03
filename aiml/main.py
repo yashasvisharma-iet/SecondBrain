@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 from typing import List
-
+from dotenv import load_dotenv
+load_dotenv()
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from openai import OpenAI

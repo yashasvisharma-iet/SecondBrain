@@ -32,7 +32,7 @@ public class PineconeVectorStoreService {
             @Value("${pinecone.api-key:}") String apiKey,
             @Value("${pinecone.index-host:}") String indexHost,
             @Value("${pinecone.namespace:secondbrain}") String namespace,
-            @Value("${vector.store.dimensions:384}") int dimensions,
+            @Value("${vector.store.dimensions:1536}") int dimensions,
             @Value("${semantic.top-k:8}") int queryTopK
     ) {
         this.restTemplate = new RestTemplate();
