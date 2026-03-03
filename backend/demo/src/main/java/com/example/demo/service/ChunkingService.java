@@ -16,14 +16,14 @@ public class ChunkingService {
     private final TextChunkRepository chunkRepo;
     private final TextChunker chunker;
     private final AimlEmbeddingClient aimlEmbeddingClient;
-    private final PostgresVectorStoreService vectorStoreService;
+    private final PineconeVectorStoreService vectorStoreService;
 
     public ChunkingService(
             NotionPageContentRepository pageRepo,
             TextChunkRepository chunkRepo,
             TextChunker chunker,
             AimlEmbeddingClient aimlEmbeddingClient,
-            PostgresVectorStoreService vectorStoreService
+            PineconeVectorStoreService vectorStoreService
     ) {
         this.pageRepo = pageRepo;
         this.chunkRepo = chunkRepo;

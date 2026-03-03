@@ -6,14 +6,15 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
-import com.example.demo.service.AimlEmbeddingClient;
 import com.example.demo.service.GraphService;
+import com.example.demo.service.PineconeVectorStoreService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -23,7 +24,7 @@ class GraphServiceTests {
     void buildsFrontendCompatibleGraphWithSemanticEdges() {
         NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
         TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
-        AimlEmbeddingClient aimlClient = mock(AimlEmbeddingClient.class);
+        PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
 
         NotionPageContent note1 = new NotionPageContent("n1", "Note one title\nBody");
         NotionPageContent note2 = new NotionPageContent("n2", "Note two title\nBody");
@@ -36,9 +37,9 @@ class GraphServiceTests {
 
         when(pageRepo.findAllByOrderBySyncedAtDesc()).thenReturn(List.of(note1, note2));
         when(chunkRepo.findAllByOrderByRawNoteIdAscChunkIndexAsc()).thenReturn(List.of(c1, c2));
-        when(aimlClient.buildSemanticEdges(any())).thenReturn(List.of(new GraphEdgeDto("c-10", "c-11", 0.91)));
+        when(vectorStore.buildSemanticEdges(any(), eq(0.8))).thenReturn(List.of(new GraphEdgeDto("c-10", "c-11", 0.91)));
 
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, aimlClient, 0.8);
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, 0.8);
         GraphDataDto data = graphService.getFeedGraph();
 
         assertThat(data.nodes()).extracting("type").contains("note", "chunk");

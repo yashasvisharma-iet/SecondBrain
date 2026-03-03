@@ -1,6 +1,8 @@
 package com.example.demo.service;
 
-import com.example.demo.dto.*;
+import com.example.demo.dto.GraphDataDto;
+import com.example.demo.dto.GraphEdgeDto;
+import com.example.demo.dto.GraphNodeDto;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
@@ -19,16 +21,16 @@ public class GraphService {
 
     private final NotionPageContentRepository pageRepository;
     private final TextChunkRepository chunkRepository;
-    private final AimlEmbeddingClient aimlEmbeddingClient;
+    private final PineconeVectorStoreService vectorStoreService;
     private final double threshold;
 
     public GraphService(NotionPageContentRepository pageRepository,
                         TextChunkRepository chunkRepository,
-                        AimlEmbeddingClient aimlEmbeddingClient,
+                        PineconeVectorStoreService vectorStoreService,
                         @Value("${semantic.threshold:0.8}") double threshold) {
         this.pageRepository = pageRepository;
         this.chunkRepository = chunkRepository;
-        this.aimlEmbeddingClient = aimlEmbeddingClient;
+        this.vectorStoreService = vectorStoreService;
         this.threshold = threshold;
     }
 
@@ -46,7 +48,7 @@ public class GraphService {
             nodes.add(new GraphNodeDto(noteNodeId(page), buildNoteLabel(page), "note"));
         }
 
-        List<AimlChunkDto> aimlChunks = new ArrayList<>();
+        List<TextChunk> graphChunks = new ArrayList<>();
         for (TextChunk chunk : chunks) {
             NotionPageContent page = pageById.get(chunk.getRawNoteId());
             if (page == null) {
@@ -56,10 +58,10 @@ public class GraphService {
             String chunkId = chunkNodeId(chunk);
             nodes.add(new GraphNodeDto(chunkId, "Chunk " + chunk.getChunkIndex(), "chunk"));
             edges.add(new GraphEdgeDto(noteNodeId(page), chunkId, null));
-            aimlChunks.add(new AimlChunkDto(chunkId, noteNodeId(page), chunk.getContent()));
+            graphChunks.add(chunk);
         }
 
-        edges.addAll(aimlEmbeddingClient.buildSemanticEdges(new AimlRelationRequest(aimlChunks, threshold)));
+        edges.addAll(vectorStoreService.buildSemanticEdges(graphChunks, threshold));
 
         return new GraphDataDto(nodes, edges);
     }
