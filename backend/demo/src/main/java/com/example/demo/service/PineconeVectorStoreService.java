@@ -103,7 +103,7 @@ public class PineconeVectorStoreService {
         Map<String, GraphEdgeDto> deduplicated = new HashMap<>();
 
         for (TextChunk sourceChunk : chunks) {
-            if (sourceChunk.getId() == null) {
+            if (sourceChunk.getId() == null || !isEligibleForSimilarity(sourceChunk.getContent())) {
                 continue;
             }
 
@@ -128,7 +128,9 @@ public class PineconeVectorStoreService {
                 }
 
                 TextChunk targetChunk = chunkByVectorId.get(match.id);
-                if (targetChunk == null || Objects.equals(targetChunk.getRawNoteId(), sourceChunk.getRawNoteId())) {
+                if (targetChunk == null
+                        || Objects.equals(targetChunk.getRawNoteId(), sourceChunk.getRawNoteId())
+                        || !isEligibleForSimilarity(targetChunk.getContent())) {
                     continue;
                 }
 
@@ -144,6 +146,30 @@ public class PineconeVectorStoreService {
         }
 
         return List.copyOf(deduplicated.values());
+    }
+
+
+    private boolean isEligibleForSimilarity(String content) {
+        if (content == null) {
+            return false;
+        }
+
+        String normalized = content.trim();
+        if (normalized.length() < 40) {
+            return false;
+        }
+
+        String[] tokens = normalized.split("\\s+");
+        if (tokens.length < 8) {
+            return false;
+        }
+
+        long alphaNumericTokens = java.util.Arrays.stream(tokens)
+                .map(token -> token.replaceAll("[^A-Za-z0-9]", ""))
+                .filter(token -> token.length() >= 3)
+                .count();
+
+        return alphaNumericTokens >= 5;
     }
 
     private boolean isConfigured() {

@@ -21,7 +21,7 @@ import static org.mockito.Mockito.when;
 class GraphServiceTests {
 
     @Test
-    void buildsOneChunkNodePerNoteAndIncludesOrphanChunkNotes() {
+    void buildsOnlyNoteNodesAndAggregatesSemanticEdgesAtNoteLevel() {
         NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
         TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
         PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
@@ -39,18 +39,23 @@ class GraphServiceTests {
 
         when(pageRepo.findAllByOrderBySyncedAtDesc()).thenReturn(List.of(note1, note2));
         when(chunkRepo.findAllByOrderByRawNoteIdAscChunkIndexAsc()).thenReturn(List.of(c1, c1Second, c2, orphan));
-        when(vectorStore.buildSemanticEdges(any(), eq(0.8))).thenReturn(List.of(new GraphEdgeDto("c-10", "c-11", 0.91)));
+        when(vectorStore.buildSemanticEdges(any(), eq(0.8))).thenReturn(List.of(
+                new GraphEdgeDto("c-10", "c-11", 0.91),
+                new GraphEdgeDto("c-12", "c-11", 0.87),
+                new GraphEdgeDto("c-13", "c-11", 0.79)
+        ));
 
         GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, 0.8);
         GraphDataDto data = graphService.getFeedGraph();
 
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("note")).hasSize(3);
-        assertThat(data.nodes()).filteredOn(node -> node.type().equals("chunk")).hasSize(3);
+        assertThat(data.nodes()).filteredOn(node -> node.type().equals("chunk")).isEmpty();
 
-        assertThat(data.edges()).anyMatch(e -> e.score() == null && e.source().equals("n1") && e.target().equals("c-10"));
-        assertThat(data.edges()).anyMatch(e -> e.score() == null && e.source().equals("orphan-note-99") && e.target().equals("c-13"));
-        assertThat(data.edges()).noneMatch(e -> e.score() == null && e.target().equals("c-12"));
-        assertThat(data.edges()).anyMatch(e -> e.score() != null && e.score() >= 0.8);
+        assertThat(data.edges()).hasSize(2);
+        assertThat(data.edges()).anyMatch(e -> e.source().equals("n1") && e.target().equals("n2") && e.score() == 0.91);
+        assertThat(data.edges()).anyMatch(e -> e.source().equals("orphan-note-99") && e.target().equals("n2") && e.score() == 0.79);
+
+        org.mockito.Mockito.verify(vectorStore).buildSemanticEdges(eq(List.of(c1, c1Second, c2, orphan)), eq(0.8));
     }
 
     private void setId(NotionPageContent page, Long id) {
