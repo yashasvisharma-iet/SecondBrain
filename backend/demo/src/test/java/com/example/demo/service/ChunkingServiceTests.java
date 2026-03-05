@@ -1,20 +1,21 @@
 package com.example.demo.service;
 
-import com.example.demo.entity.NotionPageContent;
-import com.example.demo.entity.TextChunk;
-import com.example.demo.repository.NotionPageContentRepository;
-import com.example.demo.repository.TextChunkRepository;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-import java.util.Optional;
-
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+
+import java.util.List;
+import java.util.Optional;
+
+import org.junit.jupiter.api.Test;
+
+import com.example.demo.entity.NotionPageContent;
+import com.example.demo.entity.TextChunk;
+import com.example.demo.repository.NotionPageContentRepository;
+import com.example.demo.repository.TextChunkRepository;
 
 class ChunkingServiceTests {
 
@@ -28,9 +29,9 @@ class ChunkingServiceTests {
 
         ChunkingService service = new ChunkingService(pageRepo, chunkRepo, chunker, embeddingClient, vectorStore);
 
-        NotionPageContent page = new NotionPageContent();
-        page.setId(42L);
-        page.setContent("First. Second.");
+        NotionPageContent page = mock(NotionPageContent.class);
+        when(page.getId()).thenReturn(42L);
+        when(page.getContent()).thenReturn("First. Second.");
 
         when(pageRepo.findById(42L)).thenReturn(Optional.of(page));
         when(chunkRepo.existsByRawNoteId(42L)).thenReturn(false);
@@ -69,9 +70,9 @@ class ChunkingServiceTests {
 
         ChunkingService service = new ChunkingService(pageRepo, chunkRepo, chunker, embeddingClient, vectorStore);
 
-        NotionPageContent page = new NotionPageContent();
-        page.setId(7L);
-        page.setContent("A B");
+        NotionPageContent page = mock(NotionPageContent.class);
+        when(page.getId()).thenReturn(7L);
+        when(page.getContent()).thenReturn("A B");
 
         when(pageRepo.findById(7L)).thenReturn(Optional.of(page));
         when(chunkRepo.existsByRawNoteId(7L)).thenReturn(false);

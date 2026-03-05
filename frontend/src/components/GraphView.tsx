@@ -68,6 +68,8 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
       .attr('fill', '#0f172a')
       .attr('dx', 14)
       .attr('dy', 4)
+      .style('cursor', 'pointer')
+      .on('click', (_, nodeData) => onNodeSelect?.(nodeData.id))
 
     simulation.on('tick', () => {
       link
