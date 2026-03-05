@@ -68,36 +68,46 @@ export function Feed() {
     void refreshGraph()
   }, [])
 
-  // When the graph view is created/notes change, send raw note content to backend
-  // so it can be stored and chunked on the server. We de-duplicate per-note using sessionStorage
-  // to avoid re-sending on hot reloads during the same session.
+  // Ingest only changed note content and refresh the graph once after the batch completes.
   useEffect(() => {
-    // small helper to POST raw content
-    const ingestNote = async (note: Note) => {
+    const ingestNotes = async () => {
       try {
-        const handledKey = `ingested_note_${note.id}`;
-        if (sessionStorage.getItem(handledKey)) return;
+        const notesToIngest = notes.filter((note) => {
+          const content = note.content.trim()
+          if (!content) return false
 
-        // skip empty content
-        if (!note.content) return;
-
-        await fetch('http://localhost:8080/api/notion/ingestRaw', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ pageId: note.id, content: note.content }),
+          const handledKey = `ingested_note_${note.id}`
+          const previousContent = sessionStorage.getItem(handledKey)
+          return previousContent !== content
         })
-        // mark handled regardless of response to avoid retries in this session
-        sessionStorage.setItem(handledKey, '1');
-        await refreshGraph();
-      } catch (e) {
-        // ignore errors for now; ingestion is best-effort from frontend
-        console.error('Failed to ingest note', note.id, e);
+
+        if (notesToIngest.length === 0) return
+
+        const results = await Promise.all(
+          notesToIngest.map(async (note) => {
+            const response = await fetch('http://localhost:8080/api/notion/ingestRaw', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
+              body: JSON.stringify({ pageId: note.id, content: note.content }),
+            })
+
+            if (!response.ok) return false
+
+            sessionStorage.setItem(`ingested_note_${note.id}`, note.content.trim())
+            return true
+          }),
+        )
+
+        if (results.some(Boolean)) {
+          await refreshGraph()
+        }
+      } catch (error) {
+        console.error('Failed to ingest notes', error)
       }
     }
 
-    // fire-and-forget for each note
-    notes.forEach((n) => void ingestNote(n));
+    void ingestNotes()
   }, [notes])
 
   const handleAddFolder = () => {
