@@ -34,7 +34,6 @@ class ChunkingServiceTests {
         when(page.getContent()).thenReturn("First. Second.");
 
         when(pageRepo.findById(42L)).thenReturn(Optional.of(page));
-        when(chunkRepo.existsByRawNoteId(42L)).thenReturn(false);
         when(chunker.chunk("First. Second.")).thenReturn(List.of("first chunk", "second chunk"));
 
         TextChunk firstSaved = new TextChunk();
@@ -55,6 +54,7 @@ class ChunkingServiceTests {
 
         service.chunkNote(42L);
 
+        verify(chunkRepo, times(1)).deleteAllByRawNoteId(42L);
         verify(vectorStore, times(1)).deleteByRawNoteId(42L);
         verify(vectorStore, times(1)).upsertChunkEmbedding(firstSaved, List.of(0.1, 0.2));
         verify(vectorStore, times(1)).upsertChunkEmbedding(secondSaved, List.of(0.3, 0.4));
@@ -75,7 +75,6 @@ class ChunkingServiceTests {
         when(page.getContent()).thenReturn("A B");
 
         when(pageRepo.findById(7L)).thenReturn(Optional.of(page));
-        when(chunkRepo.existsByRawNoteId(7L)).thenReturn(false);
         when(chunker.chunk("A B")).thenReturn(List.of("a", "b"));
 
         TextChunk firstSaved = new TextChunk();
@@ -95,6 +94,7 @@ class ChunkingServiceTests {
 
         service.chunkNote(7L);
 
+        verify(chunkRepo, times(1)).deleteAllByRawNoteId(7L);
         verify(vectorStore, times(1)).upsertChunkEmbedding(firstSaved, List.of(0.5, 0.6));
         verify(vectorStore, never()).upsertChunkEmbedding(secondSaved, List.of(0.5, 0.6));
     }

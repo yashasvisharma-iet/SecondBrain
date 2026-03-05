@@ -40,11 +40,9 @@ public class ChunkingService {
     public void chunkNote(Long rawNoteId) {
         if (rawNoteId == null) return;
         // Always remove existing chunks for this raw note and re-chunk based on current content.
-        // This ensures updated or oversized documents are re-processed instead of being skipped
-        // because chunks already exist.
-        if (chunkRepo.existsByRawNoteId(rawNoteId)) {
-            chunkRepo.deleteByRawNoteId(rawNoteId);
-        }
+        // The delete is executed and flushed immediately to prevent unique-key collisions when
+        // inserting a fresh (raw_note_id, chunk_index) sequence in the same transaction.
+        chunkRepo.deleteAllByRawNoteId(rawNoteId);
         vectorStoreService.deleteByRawNoteId(rawNoteId);
 
         NotionPageContent page = pageRepo.findById(rawNoteId)
