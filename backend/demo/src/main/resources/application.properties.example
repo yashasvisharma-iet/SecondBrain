@@ -13,5 +13,5 @@ pinecone.namespace=secondbrain
 vector.store.dimensions=1536
 
 # cosine similarity threshold + max matches per chunk for chunk-to-chunk semantic edges
-semantic.threshold=0.8
+semantic.threshold=0.7
 semantic.top-k=8
