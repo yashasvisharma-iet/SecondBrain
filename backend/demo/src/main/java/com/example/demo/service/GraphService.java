@@ -29,7 +29,7 @@ public class GraphService {
     public GraphService(NotionPageContentRepository pageRepository,
                         TextChunkRepository chunkRepository,
                         PineconeVectorStoreService vectorStoreService,
-                        @Value("${semantic.threshold:0.8}") double threshold) {
+                        @Value("${semantic.threshold:0.7}") double threshold) {
         this.pageRepository = pageRepository;
         this.chunkRepository = chunkRepository;
         this.vectorStoreService = vectorStoreService;

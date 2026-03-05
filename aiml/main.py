@@ -1,18 +1,22 @@
 from __future__ import annotations
 
 import os
+import re
+import hashlib
 from typing import List
 from dotenv import load_dotenv
 load_dotenv()
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="SecondBrain AIML", version="0.2.0")
 
 MODEL_NAME = "text-embedding-3-small"
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+FALLBACK_MODEL_NAME = "hashed-bow-v1"
+FALLBACK_DIMENSIONS = 512
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY")) if os.getenv("OPENAI_API_KEY") else None
 
 
 class ChunkInput(BaseModel):
@@ -53,16 +57,34 @@ def _normalize_embeddings(vectors: list[list[float]]) -> np.ndarray:
 
 def _embed_texts(texts: list[str]) -> np.ndarray:
     if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY is required")
+        return _fallback_embed_texts(texts)
 
     response = openai_client.embeddings.create(model=MODEL_NAME, input=texts)
     vectors = [item.embedding for item in response.data]
     return _normalize_embeddings(vectors)
 
 
+def _fallback_embed_texts(texts: list[str]) -> np.ndarray:
+    vectors: list[list[float]] = []
+    for text in texts:
+        vec = np.zeros(FALLBACK_DIMENSIONS, dtype=float)
+        tokens = re.findall(r"[A-Za-z0-9]{3,}", (text or "").lower())
+        for token in tokens:
+            digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+            bucket = int.from_bytes(digest, "big") % FALLBACK_DIMENSIONS
+            vec[bucket] += 1.0
+        vectors.append(vec.tolist())
+    return _normalize_embeddings(vectors)
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "model": MODEL_NAME, "provider": "openai"}
+    using_openai = bool(os.getenv("OPENAI_API_KEY"))
+    return {
+        "status": "ok",
+        "model": MODEL_NAME if using_openai else FALLBACK_MODEL_NAME,
+        "provider": "openai" if using_openai else "local-fallback",
+    }
 
 
 @app.post("/relations", response_model=SimilarityResponse)
