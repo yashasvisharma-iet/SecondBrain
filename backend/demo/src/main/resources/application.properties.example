@@ -10,7 +10,7 @@ aiml.base-url=http://localhost:8001
 pinecone.api-key=YOUR_PINECONE_API_KEY
 pinecone.index-host=https://YOUR_INDEX_HOST.svc.YOUR_ENV.pinecone.io
 pinecone.namespace=secondbrain
-vector.store.dimensions=384
+vector.store.dimensions=1536
 
 # cosine similarity threshold + max matches per chunk for chunk-to-chunk semantic edges
 semantic.threshold=0.8

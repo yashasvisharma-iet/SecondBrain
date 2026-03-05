@@ -4,6 +4,8 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -11,6 +13,8 @@ import java.util.List;
 
 @Service
 public class ChunkingService {
+
+    private static final Logger log = LoggerFactory.getLogger(ChunkingService.class);
 
     private final NotionPageContentRepository pageRepo;
     private final TextChunkRepository chunkRepo;
@@ -63,8 +67,15 @@ public class ChunkingService {
         );
 
         int paired = Math.min(savedChunks.size(), embeddings.size());
+        if (paired < savedChunks.size()) {
+            log.warn("Only {} embedding(s) generated for {} chunk(s) of rawNoteId={}. Some chunks were not upserted to Pinecone.",
+                    paired, savedChunks.size(), rawNoteId);
+        }
         for (int i = 0; i < paired; i++) {
             vectorStoreService.upsertChunkEmbedding(savedChunks.get(i), embeddings.get(i));
         }
+
+        log.info("Processed {} chunk(s) for rawNoteId={} and attempted Pinecone upsert for {} embedding(s).",
+                savedChunks.size(), rawNoteId, paired);
     }
 }
