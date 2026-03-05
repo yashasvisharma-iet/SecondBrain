@@ -11,8 +11,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,20 +46,27 @@ public class GraphService {
         List<GraphNodeDto> nodes = new ArrayList<>();
         List<GraphEdgeDto> edges = new ArrayList<>();
 
-        for (NotionPageContent page : pages) {
-            nodes.add(new GraphNodeDto(noteNodeId(page), buildNoteLabel(page), "note"));
-        }
+        Map<Long, TextChunk> firstChunkByRawNoteId = chunks.stream()
+                .collect(Collectors.toMap(
+                        TextChunk::getRawNoteId,
+                        Function.identity(),
+                        BinaryOperator.minBy(Comparator.comparingInt(TextChunk::getChunkIndex))
+                ));
 
         List<TextChunk> graphChunks = new ArrayList<>();
-        for (TextChunk chunk : chunks) {
-            NotionPageContent page = pageById.get(chunk.getRawNoteId());
-            if (page == null) {
-                continue;
-            }
+        for (Map.Entry<Long, TextChunk> entry : firstChunkByRawNoteId.entrySet()) {
+            Long rawNoteId = entry.getKey();
+            TextChunk chunk = entry.getValue();
+            NotionPageContent page = pageById.get(rawNoteId);
+
+            String noteId = page != null ? noteNodeId(page) : fallbackNoteNodeId(rawNoteId);
+            String noteLabel = page != null ? buildNoteLabel(page) : "Imported note " + rawNoteId;
+
+            nodes.add(new GraphNodeDto(noteId, noteLabel, "note"));
 
             String chunkId = chunkNodeId(chunk);
             nodes.add(new GraphNodeDto(chunkId, "Chunk " + chunk.getChunkIndex(), "chunk"));
-            edges.add(new GraphEdgeDto(noteNodeId(page), chunkId, null));
+            edges.add(new GraphEdgeDto(noteId, chunkId, null));
             graphChunks.add(chunk);
         }
 
@@ -72,6 +81,10 @@ public class GraphService {
 
     private String chunkNodeId(TextChunk chunk) {
         return "c-" + chunk.getId();
+    }
+
+    private String fallbackNoteNodeId(Long rawNoteId) {
+        return "orphan-note-" + rawNoteId;
     }
 
     private String buildNoteLabel(NotionPageContent page) {
