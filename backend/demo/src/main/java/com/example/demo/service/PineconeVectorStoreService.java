@@ -9,6 +9,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -20,6 +22,8 @@ import java.util.Objects;
 
 @Service
 public class PineconeVectorStoreService {
+
+    private static final Logger log = LoggerFactory.getLogger(PineconeVectorStoreService.class);
 
     private final RestTemplate restTemplate;
     private final String apiKey;
@@ -83,6 +87,8 @@ public class PineconeVectorStoreService {
         );
 
         post("/vectors/upsert", body, Void.class);
+        log.info("Upserted embedding for chunk {} (rawNoteId={}, chunkIndex={}) into Pinecone namespace '{}'",
+                chunk.getId(), chunk.getRawNoteId(), chunk.getChunkIndex(), namespace);
     }
 
     public List<GraphEdgeDto> buildSemanticEdges(List<TextChunk> chunks, double threshold) {
@@ -159,7 +165,7 @@ public class PineconeVectorStoreService {
             ResponseEntity<T> response = restTemplate.exchange(request, responseType);
             return response.getBody();
         } catch (RestClientException ex) {
-            System.err.println("Pinecone request failed for path " + path + ": " + ex.getMessage());
+            log.warn("Pinecone request failed for path {}: {}", path, ex.getMessage());
             return null;
         }
     }
