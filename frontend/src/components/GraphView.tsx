@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as d3 from 'd3'
 
 import { type GraphData, type GraphEdge, type GraphNode } from './GraphTypes'
@@ -12,12 +12,38 @@ type Props = {
 
 export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null)
+  const [size, setSize] = useState({ width, height })
 
   useEffect(() => {
     if (!svgRef.current) return
 
+    const svgElement = svgRef.current
+    const parent = svgElement.parentElement
+    if (!parent) return
+
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+
+      setSize({
+        width: Math.max(entry.contentRect.width, width),
+        height: Math.max(entry.contentRect.height, height),
+      })
+    })
+
+    resizeObserver.observe(parent)
+
+    return () => resizeObserver.disconnect()
+  }, [height, width])
+
+  useEffect(() => {
+    if (!svgRef.current) return
+
+    const { width: canvasWidth, height: canvasHeight } = size
     const svg = d3.select(svgRef.current)
     svg.selectAll('*').remove()
+
+    const graphLayer = svg.append('g').attr('class', 'graph-layer')
 
     const simulation = d3
       .forceSimulation<GraphNode>(data.nodes)
@@ -30,9 +56,18 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
           .strength(0.7),
       )
       .force('charge', d3.forceManyBody().strength(-220))
-      .force('center', d3.forceCenter(width / 2, height / 2))
+      .force('center', d3.forceCenter(canvasWidth / 2, canvasHeight / 2))
 
-    const link = svg
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
+      .scaleExtent([0.35, 2.5])
+      .on('zoom', (event) => {
+        graphLayer.attr('transform', event.transform)
+      })
+
+    svg.call(zoom)
+
+    const link = graphLayer
       .append('g')
       .attr('stroke', '#94a3b8')
       .attr('stroke-opacity', 0.65)
@@ -41,7 +76,7 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
       .join('line')
       .attr('stroke-width', (d) => (d.score ? d.score * 2 : 1))
 
-    const node = svg
+    const node = graphLayer
       .append('g')
       .selectAll('circle')
       .data(data.nodes)
@@ -58,7 +93,7 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
           .on('end', dragEnded),
       )
 
-    const label = svg
+    const label = graphLayer
       .append('g')
       .selectAll('text')
       .data(data.nodes)
@@ -107,7 +142,7 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
     return () => {
       simulation.stop()
     }
-  }, [data, height, onNodeSelect, width])
+  }, [data, onNodeSelect, size])
 
-  return <svg ref={svgRef} width={width} height={height} className="h-full w-full" />
+  return <svg ref={svgRef} width={size.width} height={size.height} className="h-full w-full" />
 }
