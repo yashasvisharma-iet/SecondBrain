@@ -11,10 +11,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BinaryOperator;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -44,35 +44,51 @@ public class GraphService {
                 .collect(Collectors.toMap(NotionPageContent::getId, Function.identity()));
 
         List<GraphNodeDto> nodes = new ArrayList<>();
-        List<GraphEdgeDto> edges = new ArrayList<>();
+        List<GraphEdgeDto> noteEdges = new ArrayList<>();
 
-        Map<Long, TextChunk> firstChunkByRawNoteId = chunks.stream()
-                .collect(Collectors.toMap(
-                        TextChunk::getRawNoteId,
-                        Function.identity(),
-                        BinaryOperator.minBy(Comparator.comparingInt(TextChunk::getChunkIndex))
-                ));
-
-        List<TextChunk> graphChunks = new ArrayList<>();
-        for (Map.Entry<Long, TextChunk> entry : firstChunkByRawNoteId.entrySet()) {
-            Long rawNoteId = entry.getKey();
-            TextChunk chunk = entry.getValue();
+        HashSet<Long> seenRawNoteIds = new HashSet<>();
+        for (TextChunk chunk : chunks) {
+            Long rawNoteId = chunk.getRawNoteId();
             NotionPageContent page = pageById.get(rawNoteId);
 
-            String noteId = page != null ? noteNodeId(page) : fallbackNoteNodeId(rawNoteId);
-            String noteLabel = page != null ? buildNoteLabel(page) : "Imported note " + rawNoteId;
-
-            nodes.add(new GraphNodeDto(noteId, noteLabel, "note"));
-
-            String chunkId = chunkNodeId(chunk);
-            nodes.add(new GraphNodeDto(chunkId, "Chunk " + chunk.getChunkIndex(), "chunk"));
-            edges.add(new GraphEdgeDto(noteId, chunkId, null));
-            graphChunks.add(chunk);
+            if (seenRawNoteIds.add(rawNoteId)) {
+                String noteId = page != null ? noteNodeId(page) : fallbackNoteNodeId(rawNoteId);
+                String noteLabel = page != null ? buildNoteLabel(page) : "Imported note " + rawNoteId;
+                nodes.add(new GraphNodeDto(noteId, noteLabel, "note"));
+            }
         }
 
-        edges.addAll(vectorStoreService.buildSemanticEdges(graphChunks, threshold));
+        noteEdges.addAll(buildNoteSemanticEdges(chunks, pageById));
 
-        return new GraphDataDto(nodes, edges);
+        return new GraphDataDto(nodes, noteEdges);
+    }
+
+    private List<GraphEdgeDto> buildNoteSemanticEdges(List<TextChunk> chunks, Map<Long, NotionPageContent> pageById) {
+        Map<String, Long> rawNoteIdByChunkNodeId = chunks.stream()
+                .filter(chunk -> chunk.getId() != null)
+                .collect(Collectors.toMap(this::chunkNodeId, TextChunk::getRawNoteId));
+
+        Map<String, GraphEdgeDto> deduplicatedNoteEdges = new HashMap<>();
+        for (GraphEdgeDto chunkEdge : vectorStoreService.buildSemanticEdges(chunks, threshold)) {
+            Long sourceRawNoteId = rawNoteIdByChunkNodeId.get(chunkEdge.source());
+            Long targetRawNoteId = rawNoteIdByChunkNodeId.get(chunkEdge.target());
+            if (sourceRawNoteId == null || targetRawNoteId == null || sourceRawNoteId.equals(targetRawNoteId)) {
+                continue;
+            }
+
+            String sourceNoteId = resolveNoteNodeId(pageById.get(sourceRawNoteId), sourceRawNoteId);
+            String targetNoteId = resolveNoteNodeId(pageById.get(targetRawNoteId), targetRawNoteId);
+            String dedupKey = sourceNoteId.compareTo(targetNoteId) <= 0
+                    ? sourceNoteId + "|" + targetNoteId
+                    : targetNoteId + "|" + sourceNoteId;
+
+            GraphEdgeDto existing = deduplicatedNoteEdges.get(dedupKey);
+            if (existing == null || (chunkEdge.score() != null && chunkEdge.score() > existing.score())) {
+                deduplicatedNoteEdges.put(dedupKey, new GraphEdgeDto(sourceNoteId, targetNoteId, chunkEdge.score()));
+            }
+        }
+
+        return List.copyOf(deduplicatedNoteEdges.values());
     }
 
     private String noteNodeId(NotionPageContent page) {
@@ -85,6 +101,10 @@ public class GraphService {
 
     private String fallbackNoteNodeId(Long rawNoteId) {
         return "orphan-note-" + rawNoteId;
+    }
+
+    private String resolveNoteNodeId(NotionPageContent page, Long rawNoteId) {
+        return page != null ? noteNodeId(page) : fallbackNoteNodeId(rawNoteId);
     }
 
     private String buildNoteLabel(NotionPageContent page) {
