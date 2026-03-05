@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 
 import { GraphView } from '@/components/GraphView'
 import { type GraphData } from '@/components/GraphTypes'
@@ -51,32 +51,22 @@ export function Feed() {
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = notes.filter((note) => note.folderId === activeFolderId)
 
-  const graphData = useMemo<GraphData>(() => {
-    const noteNodes = notes.map((note) => ({
-      id: note.id,
-      label: note.title || 'Untitled note',
-      type: 'note' as const,
-    }))
+  const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
 
-    const chunkNodes = notes.map((note) => ({
-      id: `c-${note.id}`,
-      label: `Chunk: ${note.title || 'Untitled'}`,
-      type: 'chunk' as const,
-    }))
-
-    const noteToChunkEdges = notes.map((note) => ({ source: note.id, target: `c-${note.id}` }))
-
-    const semanticEdges = notes.slice(1).map((note, index) => ({
-      source: `c-${notes[index].id}`,
-      target: `c-${note.id}`,
-      score: Number((0.81 + index * 0.03).toFixed(2)),
-    }))
-
-    return {
-      nodes: [...noteNodes, ...chunkNodes],
-      edges: [...noteToChunkEdges, ...semanticEdges],
+  const refreshGraph = async () => {
+    try {
+      const response = await fetch('http://localhost:8080/api/graph/feed', { credentials: 'include' })
+      if (!response.ok) return
+      const data = (await response.json()) as GraphData
+      setGraphData(data)
+    } catch (error) {
+      console.error('Failed to fetch graph data', error)
     }
-  }, [notes])
+  }
+
+  useEffect(() => {
+    void refreshGraph()
+  }, [])
 
   // When the graph view is created/notes change, send raw note content to backend
   // so it can be stored and chunked on the server. We de-duplicate per-note using sessionStorage
@@ -99,6 +89,7 @@ export function Feed() {
         })
         // mark handled regardless of response to avoid retries in this session
         sessionStorage.setItem(handledKey, '1');
+        await refreshGraph();
       } catch (e) {
         // ignore errors for now; ingestion is best-effort from frontend
         console.error('Failed to ingest note', note.id, e);
