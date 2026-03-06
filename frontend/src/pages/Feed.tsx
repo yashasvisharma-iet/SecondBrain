@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { GraphView } from '@/components/GraphView'
 import { type GraphData } from '@/components/GraphTypes'
@@ -7,49 +7,50 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 
-type Folder = {
-  id: string
-  name: string
-}
-
 type Note = {
   id: string
-  folderId: string
   title: string
   content: string
   createdAt: string
 }
 
-const initialFolders: Folder[] = [
-  { id: 'f1', name: 'General' },
-  { id: 'f2', name: 'Ideas' },
-]
-
 const initialNotes: Note[] = [
   {
     id: 'n1',
-    folderId: 'f1',
     title: 'MVP Architecture',
     content: 'Graph for navigation, Postgres for raw content, Neo4j for relationships only.',
     createdAt: 'Today',
   },
   {
     id: 'n2',
-    folderId: 'f2',
     title: 'Welcome',
     content: 'This page should feel like a simple note-taking app with graph + editor.',
     createdAt: 'Today',
   },
 ]
 
+const sidebarItems = [
+  { id: 'brain-map', label: 'Brain map', icon: '🧠' },
+  { id: 'notes', label: 'Notes', icon: '📝' },
+  { id: 'knowledge', label: 'Knowledge', icon: '📚' },
+  { id: 'connections', label: 'Connections', icon: '🔗' },
+  { id: 'insights', label: 'Insights', icon: '📈' },
+]
+
 export function Feed() {
-  const [folders, setFolders] = useState<Folder[]>(initialFolders)
   const [notes, setNotes] = useState<Note[]>(initialNotes)
-  const [activeFolderId, setActiveFolderId] = useState<string>(initialFolders[0].id)
   const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[0].id)
+  const [searchTerm, setSearchTerm] = useState('')
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
-  const visibleNotes = notes.filter((note) => note.folderId === activeFolderId)
+  const visibleNotes = useMemo(() => {
+    if (!searchTerm.trim()) return notes
+
+    const query = searchTerm.toLowerCase()
+    return notes.filter(
+      (note) => note.title.toLowerCase().includes(query) || note.content.toLowerCase().includes(query),
+    )
+  }, [notes, searchTerm])
 
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
 
@@ -65,10 +66,13 @@ export function Feed() {
   }
 
   useEffect(() => {
-    void refreshGraph()
+    const timer = window.setTimeout(() => {
+      void refreshGraph()
+    }, 0)
+
+    return () => window.clearTimeout(timer)
   }, [])
 
-  // Ingest only changed note content and refresh the graph once after the batch completes.
   useEffect(() => {
     const ingestNotes = async () => {
       try {
@@ -110,26 +114,11 @@ export function Feed() {
     void ingestNotes()
   }, [notes])
 
-  const handleAddFolder = () => {
-    const newFolder: Folder = {
-      id: `f${Date.now()}`,
-      name: `New Folder ${folders.length + 1}`,
-    }
-
-    setFolders((current) => [...current, newFolder])
-    setActiveFolderId(newFolder.id)
-  }
-
   const handleAddNote = () => {
-    const folderId = activeFolderId || folders[0]?.id
-    if (!folderId) {
-      return
-    }
-
+    const noteNumber = notes.length + 1
     const newNote: Note = {
       id: `n${Date.now()}`,
-      folderId,
-      title: 'Untitled note',
+      title: `New Note ${noteNumber}`,
       content: '',
       createdAt: 'Just now',
     }
@@ -156,82 +145,106 @@ export function Feed() {
     if (!note) return
 
     setSelectedNoteId(note.id)
-    setActiveFolderId(note.folderId)
   }
 
   return (
-    <div className="flex h-screen w-full bg-background">
-      <div className="min-w-0 flex-1 border-r bg-muted/20">
-        <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
-      </div>
+    <div className="relative flex h-screen w-full overflow-hidden bg-[#d8d2e3]">
+      <aside className="flex w-[320px] flex-col bg-[#2b0056] p-4 text-white">
+        <Button
+          type="button"
+          onClick={handleAddNote}
+          className="mb-6 h-14 w-full justify-start rounded-2xl bg-gradient-to-r from-[#9e70ff] to-[#7a58f2] px-5 text-3xl font-semibold hover:opacity-95"
+        >
+          + New Note
+        </Button>
 
-      <div className="flex w-[520px] flex-col bg-background">
-        <div className="flex items-center justify-between border-b p-4">
-          <h2 className="text-lg font-semibold">Notes</h2>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={handleAddFolder}>
-              Add folder
+        <nav className="space-y-4 text-3xl">
+          {sidebarItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="flex items-center gap-2 text-left text-white/95 transition-opacity hover:opacity-80"
+            >
+              <span>{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <main className="flex min-w-0 flex-1 flex-col p-5">
+        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl bg-[#cdc6db] p-4">
+          <div className="flex w-full max-w-xl items-center gap-3">
+            <Input
+              placeholder="Search notes, chunks, ideas..."
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              className="h-12 border-0 bg-white text-base"
+            />
+            <Button type="button" variant="secondary" className="h-12 px-5">
+              Search
             </Button>
-            <Button size="sm" onClick={handleAddNote}>
-              Add note
-            </Button>
           </div>
+          <Button type="button" variant="secondary" className="h-12 rounded-xl bg-white px-5">
+            🧠 You
+          </Button>
         </div>
 
-        <div className="border-b px-4 py-3">
-          <div className="mb-3 flex flex-wrap gap-2">
-            {folders.map((folder) => (
-              <button
-                key={folder.id}
-                type="button"
-                onClick={() => setActiveFolderId(folder.id)}
-                className={`rounded-full border px-3 py-1 text-sm transition-colors ${
-                  activeFolderId === folder.id ? 'border-primary bg-primary/10 text-primary' : 'hover:bg-muted'
-                }`}
-              >
-                {folder.name}
-              </button>
-            ))}
-          </div>
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+          <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-3">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Local notes</h2>
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+              {visibleNotes.length > 0 ? (
+                visibleNotes.map((note) => (
+                  <button
+                    key={note.id}
+                    type="button"
+                    onClick={() => setSelectedNoteId(note.id)}
+                    className={`w-full rounded-lg border p-3 text-left ${
+                      selectedNoteId === note.id ? 'border-[#7a58f2] bg-[#f1ecff]' : 'border-transparent bg-white hover:bg-[#f6f3ff]'
+                    }`}
+                  >
+                    <p className="font-medium text-[#2f2147]">{note.title}</p>
+                    <p className="line-clamp-2 text-sm text-[#675f78]">{note.content || 'Empty note'}</p>
+                  </button>
+                ))
+              ) : (
+                <p className="text-sm text-[#675f78]">No notes found.</p>
+              )}
+            </div>
 
-          <div className="space-y-2">
-            {visibleNotes.length > 0 ? (
-              visibleNotes.map((note) => (
-                <button
-                  key={note.id}
-                  type="button"
-                  onClick={() => setSelectedNoteId(note.id)}
-                  className={`w-full rounded-md border p-2 text-left ${
-                    selectedNoteId === note.id ? 'border-primary bg-primary/5' : 'hover:bg-muted'
-                  }`}
-                >
-                  <p className="font-medium">{note.title}</p>
-                  <p className="line-clamp-1 text-sm text-muted-foreground">{note.content || 'Empty note'}</p>
-                </button>
-              ))
-            ) : (
-              <p className="text-sm text-muted-foreground">No notes in this folder yet.</p>
-            )}
-          </div>
-        </div>
+            <div className="mt-3 border-t pt-3">
+              <Input
+                placeholder="Title"
+                value={selectedNote?.title ?? ''}
+                onChange={(event) => updateSelectedNote({ title: event.target.value })}
+                className="mb-2"
+              />
+              <Textarea
+                placeholder="Start writing..."
+                value={selectedNote?.content ?? ''}
+                onChange={(event) => updateSelectedNote({ content: event.target.value })}
+                className="h-24 resize-none"
+              />
+              <div className="mt-2 text-xs text-[#675f78]">
+                <Badge variant="secondary">{selectedNote ? `Created: ${selectedNote.createdAt}` : 'No note selected'}</Badge>
+              </div>
+            </div>
+          </section>
 
-        <div className="flex-1 space-y-3 p-4">
-          <Input
-            placeholder="Title"
-            value={selectedNote?.title ?? ''}
-            onChange={(event) => updateSelectedNote({ title: event.target.value })}
-          />
-          <Textarea
-            placeholder="Start writing..."
-            value={selectedNote?.content ?? ''}
-            onChange={(event) => updateSelectedNote({ content: event.target.value })}
-            className="h-[calc(100vh-280px)] min-h-[260px] resize-none"
-          />
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <Badge variant="secondary">{selectedNote ? `Created: ${selectedNote.createdAt}` : 'No note selected'}</Badge>
-          </div>
+          <section className="min-h-0 overflow-hidden rounded-2xl bg-[#d2cddb] p-3">
+            <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
+          </section>
         </div>
-      </div>
+      </main>
+
+      <Button
+        type="button"
+        className="absolute bottom-6 right-6 rounded-full bg-[#5f48d8] px-6 py-5 text-base shadow-lg hover:bg-[#523dc0]"
+        title="AI agent placeholder"
+      >
+        AI Agent
+      </Button>
     </div>
   )
 }
