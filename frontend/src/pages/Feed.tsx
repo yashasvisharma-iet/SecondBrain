@@ -153,7 +153,6 @@ export function Feed() {
 
     if (existingNote) {
       setSelectedNoteId(existingNote.id)
-      setActiveFolderId(existingNote.folderId)
       return
     }
 
@@ -165,13 +164,10 @@ export function Feed() {
       if (!response.ok) return
 
       const data = (await response.json()) as { pageId: string; content: string }
-      const fallbackFolderId = folders[0]?.id
-      if (!fallbackFolderId) return
 
-    setSelectedNoteId(note.id)
       const importedNote: Note = {
         id: data.pageId,
-        folderId: fallbackFolderId,
+
         title: resolveTitleFromContent(data.content ?? ''),
         content: data.content ?? '',
         createdAt: 'Imported',
@@ -179,7 +175,7 @@ export function Feed() {
 
       setNotes((current) => [importedNote, ...current])
       setSelectedNoteId(importedNote.id)
-      setActiveFolderId(importedNote.folderId)
+
     } catch (error) {
       console.error('Failed to open note from graph', error)
     }
