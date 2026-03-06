@@ -1,9 +1,11 @@
-# AIML service (FastAPI)
+# AIML services
 
-Computes semantic relationships between text chunks using OpenAI embeddings in Python.
+Contains two Python services used by SecondBrain.
 
-## Run
+## 1) Embeddings/relations service (FastAPI)
+Computes semantic relationships between text chunks using OpenAI embeddings.
 
+### Run
 ```bash
 cd aiml
 python -m venv .venv
@@ -12,14 +14,30 @@ pip install -r requirements.txt
 uvicorn main:app --host 0.0.0.0 --port 8001
 ```
 
-> The service uses `text-embedding-3-small` and requires `OPENAI_API_KEY`.
-
-## API
-
+API:
 - `GET /health`
 - `POST /relations`
-  - Input: chunks + threshold
-  - Output: cross-note semantic edges with cosine similarity scores.
 - `POST /embeddings`
-  - Input: list of texts
-  - Output: normalized embedding vectors for pgvector storage.
+
+## 2) AI bot service (Flask + LangGraph)
+Runs a LangGraph workflow backed by OpenAI chat model credentials.
+
+### Environment
+Set your OpenAI key:
+```bash
+export OPENAI_API_KEY=<your_key>
+# optional:
+export OPENAI_CHAT_MODEL=gpt-4o-mini
+```
+
+### Run
+```bash
+cd aiml
+python ai_bot.py
+```
+
+API:
+- `GET /health`
+- `POST /chat`
+  - Input: `{ "message": "..." }`
+  - Output: `{ "answer": "..." }`
