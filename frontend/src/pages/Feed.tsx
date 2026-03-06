@@ -39,6 +39,20 @@ const sidebarItems = [
 
 type WorkspaceMode = (typeof sidebarItems)[number]['id']
 
+type AppConnection = {
+  id: string
+  app: string
+  description: string
+  status: 'Connected' | 'Not connected'
+}
+
+const connections: AppConnection[] = [
+  { id: 'notion', app: 'Notion', description: 'Sync notes and pages', status: 'Connected' },
+  { id: 'google-docs', app: 'Google Docs', description: 'Ingest docs and meeting notes', status: 'Not connected' },
+  { id: 'drive', app: 'Google Drive', description: 'Import PDFs and files', status: 'Not connected' },
+  { id: 'slack', app: 'Slack', description: 'Capture team knowledge snippets', status: 'Not connected' },
+]
+
 export function Feed() {
   const [notes, setNotes] = useState<Note[]>(initialNotes)
   const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[0].id)
@@ -58,15 +72,6 @@ export function Feed() {
 
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
 
-  const graphStats = useMemo(
-    () => ({
-      notes: graphData.nodes.filter((node) => node.type === 'note').length,
-      chunks: graphData.nodes.filter((node) => node.type === 'chunk').length,
-      links: graphData.edges.length,
-    }),
-    [graphData],
-  )
-
   const refreshGraph = async () => {
     try {
       const response = await fetch('http://localhost:8080/api/graph/feed', { credentials: 'include' })
@@ -76,6 +81,22 @@ export function Feed() {
     } catch (error) {
       console.error('Failed to fetch graph data', error)
     }
+  }
+
+  const ingestNote = async (note: Pick<Note, 'id' | 'title' | 'content'>) => {
+    const contentToIngest = note.content.trim() || note.title.trim() || 'Untitled note'
+    const response = await fetch('http://localhost:8080/api/notion/ingestRaw', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ pageId: note.id, content: contentToIngest }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to ingest note ${note.id}`)
+    }
+
+    sessionStorage.setItem(`ingested_note_${note.id}`, contentToIngest)
   }
 
   useEffect(() => {
@@ -102,17 +123,12 @@ export function Feed() {
 
         const results = await Promise.all(
           notesToIngest.map(async (note) => {
-            const response = await fetch('http://localhost:8080/api/notion/ingestRaw', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              credentials: 'include',
-              body: JSON.stringify({ pageId: note.id, content: note.content }),
-            })
-
-            if (!response.ok) return false
-
-            sessionStorage.setItem(`ingested_note_${note.id}`, note.content.trim())
-            return true
+            try {
+              await ingestNote(note)
+              return true
+            } catch {
+              return false
+            }
           }),
         )
 
@@ -139,6 +155,12 @@ export function Feed() {
     setNotes((current) => [newNote, ...current])
     setSelectedNoteId(newNote.id)
     setActiveMode('notes')
+
+    void ingestNote(newNote)
+      .then(() => refreshGraph())
+      .catch((error) => {
+        console.error('Failed to ingest newly added note', error)
+      })
   }
 
   const updateSelectedNote = (updates: Partial<Pick<Note, 'title' | 'content'>>) => {
@@ -337,15 +359,25 @@ export function Feed() {
 
           {activeMode === 'connections' && (
             <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
-              <h2 className="mb-2 text-lg font-semibold">Connection health</h2>
-              <ul className="space-y-2 text-sm text-[#4d4560]">
-                <li>• Note nodes: {graphStats.notes}</li>
-                <li>• Chunk nodes: {graphStats.chunks}</li>
-                <li>• Relationship edges: {graphStats.links}</li>
-              </ul>
-              <p className="mt-4 rounded-xl bg-[#f6f3ff] p-4 text-sm">
-                Tip: click <span className="font-semibold">Brain map</span> to inspect node-level links and open full note detail.
-              </p>
+              <h2 className="mb-2 text-lg font-semibold">App connections</h2>
+              <p className="mb-4 text-sm text-[#675f78]">Manage source apps connected to your knowledge graph.</p>
+              <div className="space-y-3">
+                {connections.map((connection) => (
+                  <div key={connection.id} className="flex items-center justify-between rounded-xl border border-[#e6e1f2] bg-[#faf8ff] px-4 py-3">
+                    <div>
+                      <p className="font-medium">{connection.app}</p>
+                      <p className="text-xs text-[#675f78]">{connection.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={connection.status === 'Connected' ? 'default' : 'secondary'}>{connection.status}</Badge>
+                      <Button type="button" size="sm" variant="secondary">
+                        {connection.status === 'Connected' ? 'Reconnect' : 'Connect'}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-4 rounded-xl bg-[#f6f3ff] p-4 text-sm">Connected apps can ingest fresh content into your graph automatically.</p>
             </section>
           )}
 
