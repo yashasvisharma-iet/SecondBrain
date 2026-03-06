@@ -3,10 +3,12 @@ package com.example.demo.service;
 import com.example.demo.dto.GraphDataDto;
 import com.example.demo.dto.GraphEdgeDto;
 import com.example.demo.dto.GraphNodeDto;
+import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -61,6 +63,42 @@ public class GraphService {
         noteEdges.addAll(buildNoteSemanticEdges(chunks, pageById));
 
         return new GraphDataDto(nodes, noteEdges);
+    }
+
+    public AgentQueryResponse answerFromDatabase(String query) {
+        String normalizedQuery = query == null ? "" : query.trim();
+        if (normalizedQuery.isEmpty()) {
+            return new AgentQueryResponse("Please enter a question for me to search your knowledge base.", List.of());
+        }
+
+        List<TextChunk> matches = chunkRepository.searchByContent(normalizedQuery, PageRequest.of(0, 5));
+        if (matches.isEmpty()) {
+            return new AgentQueryResponse("I couldn't find matching notes in your database yet. Try different keywords or add more content.", List.of());
+        }
+
+        Map<Long, String> pageIdByRawNoteId = pageRepository.findAll().stream()
+                .collect(Collectors.toMap(NotionPageContent::getId, NotionPageContent::getPageId));
+
+        List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
+                .map(chunk -> new AgentQueryResponse.AgentCitationDto(
+                        pageIdByRawNoteId.getOrDefault(chunk.getRawNoteId(), "orphan-note-" + chunk.getRawNoteId()),
+                        chunk.getChunkIndex(),
+                        abbreviate(chunk.getContent(), 180)))
+                .toList();
+
+        String answer = "I found " + matches.size() + " relevant chunk(s) in your database for: \"" + normalizedQuery + "\".";
+        return new AgentQueryResponse(answer, citations);
+    }
+
+    private String abbreviate(String content, int maxChars) {
+        if (content == null) {
+            return "";
+        }
+        String compact = content.replaceAll("\\s+", " ").trim();
+        if (compact.length() <= maxChars) {
+            return compact;
+        }
+        return compact.substring(0, maxChars) + "...";
     }
 
     private List<GraphEdgeDto> buildNoteSemanticEdges(List<TextChunk> chunks, Map<Long, NotionPageContent> pageById) {

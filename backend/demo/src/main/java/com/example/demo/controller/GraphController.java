@@ -1,8 +1,12 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.AgentQueryRequest;
+import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.dto.GraphDataDto;
 import com.example.demo.service.GraphService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -19,5 +23,10 @@ public class GraphController {
     @GetMapping("/feed")
     public GraphDataDto feedGraph() {
         return graphService.getFeedGraph();
+    }
+
+    @PostMapping("/ask")
+    public AgentQueryResponse askAgent(@RequestBody AgentQueryRequest request) {
+        return graphService.answerFromDatabase(request.query());
     }
 }
