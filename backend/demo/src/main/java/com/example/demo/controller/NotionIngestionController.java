@@ -1,5 +1,6 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.NoteContentDto;
 import com.example.demo.service.NotionIngestionService;
 import com.example.demo.service.ChunkingService;
 import com.example.demo.repository.NotionPageContentRepository;
@@ -58,5 +59,13 @@ public class NotionIngestionController {
                 .orElseThrow(() -> new IllegalArgumentException("pageId not found: " + pageId));
         chunkingService.chunkNote(page.getId());
         return ResponseEntity.ok("Rechunk triggered for pageId=" + pageId + " (rawNoteId=" + page.getId() + ")");
+    }
+
+    @GetMapping("/page/{pageId}")
+    public ResponseEntity<NoteContentDto> getPageByPageId(@PathVariable String pageId) {
+        return pageRepo
+                .findByPageId(pageId)
+                .map(page -> ResponseEntity.ok(new NoteContentDto(page.getPageId(), page.getContent())))
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 }

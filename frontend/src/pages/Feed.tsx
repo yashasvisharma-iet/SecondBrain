@@ -138,13 +138,51 @@ export function Feed() {
     )
   }
 
-  const handleGraphSelect = (nodeId: string) => {
-    const parsedId = nodeId.startsWith('c-') ? nodeId.slice(2) : nodeId
-    const note = notes.find((item) => item.id === parsedId)
+  const resolveTitleFromContent = (content: string) => {
+    const firstLine = content
+      .split('\n')
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
 
-    if (!note) return
+    return firstLine ? firstLine.slice(0, 80) : 'Imported note'
+  }
+
+  const handleGraphSelect = async (nodeId: string) => {
+    const parsedId = nodeId.startsWith('c-') ? nodeId.slice(2) : nodeId
+    const existingNote = notes.find((item) => item.id === parsedId)
+
+    if (existingNote) {
+      setSelectedNoteId(existingNote.id)
+      setActiveFolderId(existingNote.folderId)
+      return
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/api/notion/page/${parsedId}`, {
+        credentials: 'include',
+      })
+
+      if (!response.ok) return
+
+      const data = (await response.json()) as { pageId: string; content: string }
+      const fallbackFolderId = folders[0]?.id
+      if (!fallbackFolderId) return
 
     setSelectedNoteId(note.id)
+      const importedNote: Note = {
+        id: data.pageId,
+        folderId: fallbackFolderId,
+        title: resolveTitleFromContent(data.content ?? ''),
+        content: data.content ?? '',
+        createdAt: 'Imported',
+      }
+
+      setNotes((current) => [importedNote, ...current])
+      setSelectedNoteId(importedNote.id)
+      setActiveFolderId(importedNote.folderId)
+    } catch (error) {
+      console.error('Failed to open note from graph', error)
+    }
   }
 
   return (
