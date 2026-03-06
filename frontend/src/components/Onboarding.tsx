@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -10,6 +9,7 @@ import {
   ChevronRight,
   Plug,
   Layers,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,11 +35,12 @@ const NOTION_AUTH_URL =
 const Onboarding = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const totalSteps = 2;
+  const totalSteps = 3;
 
   // New states
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [notionConnected, setNotionConnected] = useState(false);
+  const [googleDocsConnected, setGoogleDocsConnected] = useState(false);
 
   const progress = (step / totalSteps) * 100;
 
@@ -59,6 +60,11 @@ const Onboarding = () => {
 
     if (step === 2 && !notionConnected && selectedApps.includes("Notion")) {
       toast.error("Please connect your Notion account");
+      return;
+    }
+
+    if (step === 3 && !googleDocsConnected && selectedApps.includes("Google Docs")) {
+      toast.error("Please connect your Google Docs account");
       return;
     }
 
@@ -110,6 +116,12 @@ const Onboarding = () => {
                   </p>
                 </div>
 
+                <ol className="list-decimal pl-5 text-sm text-muted-foreground space-y-1">
+                  <li>Choose the apps you want to connect.</li>
+                  <li>Connect Notion (if selected).</li>
+                  <li>Connect Google Docs (if selected).</li>
+                </ol>
+
                 <div className="flex flex-wrap gap-2 justify-center">
                   {NOTE_APPS.map((app) => (
                     <Badge
@@ -153,6 +165,12 @@ const Onboarding = () => {
                 </div>
 
                 <div className="glass p-5 rounded-xl border text-center space-y-4">
+                  <ol className="list-decimal text-left pl-5 text-xs text-muted-foreground space-y-1">
+                    <li>Click <span className="font-medium">Connect Notion</span>.</li>
+                    <li>Authorize this app in the Notion window.</li>
+                    <li>Return here and continue.</li>
+                  </ol>
+
                   {notionConnected ? (
                     <Badge className="gradient-primary text-white">
                       Notion Connected
@@ -161,6 +179,7 @@ const Onboarding = () => {
                     <Button
                       className="w-full"
                       onClick={() => {
+                        setNotionConnected(true);
                         window.location.href = NOTION_AUTH_URL;
                       }}
                     >
@@ -171,6 +190,61 @@ const Onboarding = () => {
                   <p className="text-xs text-muted-foreground">
                     You’ll be redirected to Notion to authorize access
                   </p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Step 3 — Google Docs */}
+            {step === 3 && (
+              <motion.div
+                key="step3"
+                variants={fadeSlide}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+                transition={{ duration: 0.4 }}
+                className="space-y-6"
+              >
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 mx-auto mb-4 rounded-full gradient-primary flex items-center justify-center">
+                    <FileText className="w-8 h-8 text-white" />
+                  </div>
+                  <h3 className="text-2xl font-semibold mb-1">
+                    Connect Google Docs
+                  </h3>
+                  <p className="text-muted-foreground text-sm">
+                    Link Google Docs to import docs and meeting notes
+                  </p>
+                </div>
+
+                <div className="glass p-5 rounded-xl border text-center space-y-4">
+                  <ol className="list-decimal text-left pl-5 text-xs text-muted-foreground space-y-1">
+                    <li>Click <span className="font-medium">Connect Google Docs</span>.</li>
+                    <li>Sign in and grant Google Docs access.</li>
+                    <li>Come back here and click Finish.</li>
+                  </ol>
+
+                  {selectedApps.includes("Google Docs") ? (
+                    googleDocsConnected ? (
+                      <Badge className="gradient-primary text-white">
+                        Google Docs Connected
+                      </Badge>
+                    ) : (
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                          setGoogleDocsConnected(true);
+                          toast.success("Google Docs connected");
+                        }}
+                      >
+                        Connect Google Docs
+                      </Button>
+                    )
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Google Docs was not selected in step 1, so this step is optional.
+                    </p>
+                  )}
                 </div>
               </motion.div>
             )}
