@@ -210,7 +210,11 @@ export function Feed() {
     }
 
     try {
-      const response = await fetch(`http://localhost:8080/api/notion/page/${parsedId}`, {
+      const sourceEndpoint = parsedId.startsWith('gdoc:')
+        ? `http://localhost:8080/api/google-docs/doc/${encodeURIComponent(parsedId.slice(5))}`
+        : `http://localhost:8080/api/notion/page/${encodeURIComponent(parsedId)}`
+
+      const response = await fetch(sourceEndpoint, {
         credentials: 'include',
       })
 
