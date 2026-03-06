@@ -46,6 +46,17 @@ type AppConnection = {
   status: 'Connected' | 'Not connected'
 }
 
+type AgentCitation = {
+  pageId: string
+  chunkIndex: number
+  snippet: string
+}
+
+type AgentResponse = {
+  answer: string
+  citations: AgentCitation[]
+}
+
 const connections: AppConnection[] = [
   { id: 'notion', app: 'Notion', description: 'Sync notes and pages', status: 'Connected' },
   { id: 'google-docs', app: 'Google Docs', description: 'Ingest docs and meeting notes', status: 'Not connected' },
@@ -59,6 +70,10 @@ export function Feed() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeMode, setActiveMode] = useState<WorkspaceMode>('brain-map')
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isAgentOpen, setIsAgentOpen] = useState(false)
+  const [agentQuery, setAgentQuery] = useState('')
+  const [agentLoading, setAgentLoading] = useState(false)
+  const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null)
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = useMemo(() => {
@@ -218,6 +233,32 @@ export function Feed() {
 
     } catch (error) {
       console.error('Failed to open note from graph', error)
+    }
+  }
+
+  const handleAgentAsk = async () => {
+    if (!agentQuery.trim()) return
+
+    setAgentLoading(true)
+    try {
+      const response = await fetch('http://localhost:8080/api/graph/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ query: agentQuery.trim() }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Agent request failed')
+      }
+
+      const data = (await response.json()) as AgentResponse
+      setAgentResponse(data)
+    } catch (error) {
+      console.error('Failed to query AI agent', error)
+      setAgentResponse({ answer: 'Could not reach the agent endpoint. Make sure the backend is running.', citations: [] })
+    } finally {
+      setAgentLoading(false)
     }
   }
 
@@ -429,10 +470,46 @@ export function Feed() {
       <Button
         type="button"
         className="absolute bottom-6 right-6 rounded-full bg-[#5f48d8] px-6 py-5 text-base shadow-lg hover:bg-[#523dc0]"
-        title="AI agent placeholder"
+        title="Open AI agent"
+        onClick={() => setIsAgentOpen((open) => !open)}
       >
         AI Agent
       </Button>
+
+      {isAgentOpen && (
+        <section className="absolute bottom-24 right-6 z-20 w-[min(420px,calc(100vw-2rem))] rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur">
+          <h3 className="text-base font-semibold text-[#2f2147]">AI Agent</h3>
+          <p className="mt-1 text-sm text-[#675f78]">Ask a question and I&apos;ll search matching chunks from your database.</p>
+          <div className="mt-3 flex gap-2">
+            <Input
+              value={agentQuery}
+              onChange={(event) => setAgentQuery(event.target.value)}
+              placeholder="e.g. what did I write about architecture?"
+            />
+            <Button type="button" onClick={handleAgentAsk} disabled={agentLoading || !agentQuery.trim()}>
+              {agentLoading ? 'Searching...' : 'Ask'}
+            </Button>
+          </div>
+
+          {agentResponse && (
+            <div className="mt-3 space-y-3 rounded-xl bg-[#f8f6ff] p-3 text-sm text-[#2f2147]">
+              <p>{agentResponse.answer}</p>
+              {agentResponse.citations.length > 0 && (
+                <ul className="space-y-2">
+                  {agentResponse.citations.map((citation, index) => (
+                    <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-2">
+                      <p className="text-xs font-medium text-[#5d5470]">
+                        {citation.pageId} · chunk {citation.chunkIndex}
+                      </p>
+                      <p>{citation.snippet}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </section>
+      )}
     </div>
   )
 }
