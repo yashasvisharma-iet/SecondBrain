@@ -37,10 +37,14 @@ const sidebarItems = [
   { id: 'insights', label: 'Insights', icon: '📈' },
 ]
 
+type WorkspaceMode = (typeof sidebarItems)[number]['id']
+
 export function Feed() {
   const [notes, setNotes] = useState<Note[]>(initialNotes)
   const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[0].id)
   const [searchTerm, setSearchTerm] = useState('')
+  const [activeMode, setActiveMode] = useState<WorkspaceMode>('brain-map')
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = useMemo(() => {
@@ -53,6 +57,15 @@ export function Feed() {
   }, [notes, searchTerm])
 
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
+
+  const graphStats = useMemo(
+    () => ({
+      notes: graphData.nodes.filter((node) => node.type === 'note').length,
+      chunks: graphData.nodes.filter((node) => node.type === 'chunk').length,
+      links: graphData.edges.length,
+    }),
+    [graphData],
+  )
 
   const refreshGraph = async () => {
     try {
@@ -125,6 +138,7 @@ export function Feed() {
 
     setNotes((current) => [newNote, ...current])
     setSelectedNoteId(newNote.id)
+    setActiveMode('notes')
   }
 
   const updateSelectedNote = (updates: Partial<Pick<Note, 'title' | 'content'>>) => {
@@ -153,6 +167,8 @@ export function Feed() {
 
     if (existingNote) {
       setSelectedNoteId(existingNote.id)
+      setActiveMode('brain-map')
+      setIsDetailOpen(true)
       return
     }
 
@@ -175,6 +191,8 @@ export function Feed() {
 
       setNotes((current) => [importedNote, ...current])
       setSelectedNoteId(importedNote.id)
+      setActiveMode('brain-map')
+      setIsDetailOpen(true)
 
     } catch (error) {
       console.error('Failed to open note from graph', error)
@@ -197,10 +215,11 @@ export function Feed() {
             <button
               key={item.id}
               type="button"
+              onClick={() => setActiveMode(item.id)}
               className="flex items-center gap-2 text-left text-white/95 transition-opacity hover:opacity-80"
             >
               <span>{item.icon}</span>
-              <span>{item.label}</span>
+              <span className={activeMode === item.id ? 'font-semibold text-white' : ''}>{item.label}</span>
             </button>
           ))}
         </nav>
@@ -219,12 +238,23 @@ export function Feed() {
               Search
             </Button>
           </div>
+          <Badge variant="secondary" className="hidden rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#3d3550] md:inline-flex">
+            {sidebarItems.find((item) => item.id === activeMode)?.label}
+          </Badge>
           <Button type="button" variant="secondary" className="h-12 rounded-xl bg-white px-5">
             🧠 You
           </Button>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
+        <p className="mb-3 text-sm font-medium text-[#4f4565]">
+          {activeMode === 'brain-map' && 'Explore your graph and open any node to see complete note context.'}
+          {activeMode === 'notes' && 'Write and edit notes directly in Second Brain.'}
+          {activeMode === 'knowledge' && 'Review distilled concepts from your current note collection.'}
+          {activeMode === 'connections' && 'Inspect how ideas are linked across notes and chunks.'}
+          {activeMode === 'insights' && 'Get revision-oriented prompts to resume exactly where you left off.'}
+        </p>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
           <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-3">
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Local notes</h2>
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
@@ -233,7 +263,10 @@ export function Feed() {
                   <button
                     key={note.id}
                     type="button"
-                    onClick={() => setSelectedNoteId(note.id)}
+                    onClick={() => {
+                      setSelectedNoteId(note.id)
+                      setIsDetailOpen(true)
+                    }}
                     className={`w-full rounded-lg border p-3 text-left ${
                       selectedNoteId === note.id ? 'border-[#7a58f2] bg-[#f1ecff]' : 'border-transparent bg-white hover:bg-[#f6f3ff]'
                     }`}
@@ -266,8 +299,97 @@ export function Feed() {
             </div>
           </section>
 
-          <section className="min-h-0 overflow-hidden rounded-2xl bg-[#d2cddb] p-3">
-            <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
+          {activeMode === 'brain-map' && (
+            <section className="min-h-0 overflow-hidden rounded-2xl bg-[#d2cddb] p-3">
+              <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
+            </section>
+          )}
+
+          {activeMode === 'notes' && (
+            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
+              <h2 className="mb-3 text-lg font-semibold text-[#2f2147]">Focused note editor</h2>
+              <Input
+                placeholder="Untitled"
+                value={selectedNote?.title ?? ''}
+                onChange={(event) => updateSelectedNote({ title: event.target.value })}
+                className="mb-3"
+              />
+              <Textarea
+                placeholder="Start writing..."
+                value={selectedNote?.content ?? ''}
+                onChange={(event) => updateSelectedNote({ content: event.target.value })}
+                className="min-h-0 flex-1 resize-none"
+              />
+            </section>
+          )}
+
+          {activeMode === 'knowledge' && (
+            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+              <h2 className="mb-2 text-lg font-semibold">Knowledge snapshot</h2>
+              <p className="mb-4 text-sm text-[#675f78]">Quick concept recap generated from your latest selected note.</p>
+              <p className="rounded-xl bg-[#f6f3ff] p-4 text-sm leading-6">
+                {selectedNote?.content
+                  ? `${selectedNote.content.slice(0, 350)}${selectedNote.content.length > 350 ? '...' : ''}`
+                  : 'Select a note to see extracted key ideas and condensed concepts here.'}
+              </p>
+            </section>
+          )}
+
+          {activeMode === 'connections' && (
+            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+              <h2 className="mb-2 text-lg font-semibold">Connection health</h2>
+              <ul className="space-y-2 text-sm text-[#4d4560]">
+                <li>• Note nodes: {graphStats.notes}</li>
+                <li>• Chunk nodes: {graphStats.chunks}</li>
+                <li>• Relationship edges: {graphStats.links}</li>
+              </ul>
+              <p className="mt-4 rounded-xl bg-[#f6f3ff] p-4 text-sm">
+                Tip: click <span className="font-semibold">Brain map</span> to inspect node-level links and open full note detail.
+              </p>
+            </section>
+          )}
+
+          {activeMode === 'insights' && (
+            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+              <h2 className="mb-2 text-lg font-semibold">Revision insights</h2>
+              <div className="space-y-3 text-sm text-[#4d4560]">
+                <p className="rounded-xl bg-[#f6f3ff] p-3">Continue where you left off: <span className="font-semibold">{selectedNote?.title ?? 'No note selected'}</span></p>
+                <p className="rounded-xl bg-[#f6f3ff] p-3">Next action: Ask AI to quiz you on this note and suggest linked reading chunks.</p>
+                <p className="rounded-xl bg-[#f6f3ff] p-3">Memory hint: revisit notes with fewer than 2 graph links this week.</p>
+              </div>
+            </section>
+          )}
+
+          <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Node detail</h2>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setIsDetailOpen((open) => !open)}>
+                {isDetailOpen ? 'Hide' : 'Show'}
+              </Button>
+            </div>
+
+            {isDetailOpen && selectedNote ? (
+              <>
+                <p className="text-lg font-semibold text-[#2f2147]">{selectedNote.title || 'Untitled'}</p>
+                <p className="mb-3 text-xs text-[#675f78]">Source: {selectedNote.createdAt === 'Imported' ? 'Imported node' : 'Local note'}</p>
+                <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-[#f8f6ff] p-3 text-sm leading-6 text-[#2f2147]">
+                  {selectedNote.content || 'This note is empty. Add details to enrich your graph memory.'}
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  <Button type="button" variant="secondary" className="justify-start" onClick={() => setActiveMode('notes')}>
+                    Continue where I left off
+                  </Button>
+                  <Button type="button" variant="secondary" className="justify-start">
+                    Revise this with AI
+                  </Button>
+                  <Button type="button" variant="secondary" className="justify-start" onClick={handleAddNote}>
+                    Add linked note
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-[#675f78]">Select a note or graph node to view full content and suggested next actions.</p>
+            )}
           </section>
         </div>
       </main>
