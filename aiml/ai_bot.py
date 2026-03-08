@@ -53,6 +53,18 @@ def _build_graph(model: ChatOpenAI):
     graph = StateGraph(BotState)
 
     def generate(state: BotState) -> BotState:
+        retrieval = _fetch_retrieval_context(state["user_message"])
+        citations = retrieval.get("citations", [])
+
+        context_lines = []
+        for citation in citations[:5]:
+            page_id = citation.get("pageId", "unknown-page")
+            chunk_index = citation.get("chunkIndex", "?")
+            snippet = citation.get("snippet", "")
+            context_lines.append(f"- {page_id} | chunk {chunk_index}: {snippet}")
+
+        retrieval_context = "\n".join(context_lines) if context_lines else "No retrieved context available."
+
         response = model.invoke(
             [
                 SystemMessage(content=SYSTEM_PROMPT),
@@ -135,6 +147,7 @@ def chat():
         }
     )
     answer = result.get("answer", "")
+    retrieval = _fetch_retrieval_context(message)
 
     return jsonify({"answer": answer, "citations": citations})
 
