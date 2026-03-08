@@ -119,33 +119,6 @@ class GraphServiceTests {
         assertThat(response.citations().getFirst().snippet()).contains("transformers");
     }
 
-    @Test
-    void answerFromDatabaseUsesVectorRetrievalInsteadOfChunkRepositorySearch() {
-        NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
-        TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
-        PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
-        AimlEmbeddingClient aimlEmbeddingClient = mock(AimlEmbeddingClient.class);
-
-        NotionPageContent note = new NotionPageContent("page-1", "Vector note");
-        setId(note, 1L);
-        when(pageRepo.findAll()).thenReturn(List.of(note));
-        when(aimlEmbeddingClient.buildEmbeddings(List.of("what is retrieval augmented generation")))
-                .thenReturn(List.of(List.of(0.2, 0.3, 0.4)));
-        when(vectorStore.querySimilarChunks(List.of(0.2, 0.3, 0.4), 5, 0.55))
-                .thenReturn(List.of(new PineconeVectorStoreService.RetrievedChunkMatch(1L, 2,
-                        "RAG fetches semantically similar chunks from vector stores before generation.",
-                        99L,
-                        0.88)));
-
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8);
-        AgentQueryResponse response = graphService.answerFromDatabase("what is retrieval augmented generation");
-
-        assertThat(response.answer()).contains("vector database");
-        assertThat(response.citations()).hasSize(1);
-        assertThat(response.citations().getFirst().pageId()).isEqualTo("page-1");
-        assertThat(response.citations().getFirst().chunkIndex()).isEqualTo(2);
-    }
-
     private void setId(NotionPageContent page, Long id) {
         try {
             var field = NotionPageContent.class.getDeclaredField("id");

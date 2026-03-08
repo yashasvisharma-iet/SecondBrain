@@ -43,4 +43,4 @@ API:
 - `POST /chat`
   - Input: `{ "message": "..." }`
   - Output: `{ "answer": "...", "citations": [...] }`
-  - Behavior: if backend retrieval returns no citations, the bot returns backend `answer` directly (instead of a generic LLM fallback) so you can see the true retrieval status.
+  - Behavior: if backend retrieval returns an `answer` (with or without citations), `/chat` returns that backend answer directly so frontend output stays aligned with `/api/graph/ask`. The LLM path is only used when backend retrieval is unreachable/empty.

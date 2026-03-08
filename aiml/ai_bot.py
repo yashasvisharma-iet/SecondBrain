@@ -73,7 +73,7 @@ def _build_graph(model: ChatOpenAI):
                         f"User question: {state['user_message']}\n\n"
                         f"Retrieved service answer:\n{state['retrieval_answer'] or 'None'}\n\n"
                         f"Retrieved knowledge base context:\n{state['retrieval_context']}\n\n"
-                        "Use the retrieved context when relevant. If context is missing or weak, clearly say no matching notes were found."
+                        "Rewrite the backend-retrieved answer in a concise, helpful way."
                     )
                 ),
             ]
@@ -126,8 +126,8 @@ def chat():
     citations = retrieval.get("citations", [])
     retrieval_answer = str(retrieval.get("answer", "")).strip()
 
-    if not citations and retrieval_answer:
-        return jsonify({"answer": retrieval_answer, "citations": []})
+    if retrieval_answer:
+        return jsonify({"answer": retrieval_answer, "citations": citations})
 
     context_lines = []
     for citation in citations[:5]:
