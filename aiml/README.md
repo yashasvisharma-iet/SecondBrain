@@ -20,7 +20,7 @@ API:
 - `POST /embeddings`
 
 ## 2) AI bot service (Flask + LangGraph)
-Runs a LangGraph workflow backed by OpenAI chat model credentials.
+Runs a LangGraph workflow backed by OpenAI chat model credentials and optional retrieval context from the backend `/api/graph/ask` endpoint.
 
 ### Environment
 Set your OpenAI key:
@@ -28,6 +28,8 @@ Set your OpenAI key:
 export OPENAI_API_KEY=<your_key>
 # optional:
 export OPENAI_CHAT_MODEL=gpt-4o-mini
+# optional (for retrieval from backend GraphService):
+export BACKEND_ASK_URL=http://localhost:8080/api/graph/ask
 ```
 
 ### Run
@@ -40,4 +42,4 @@ API:
 - `GET /health`
 - `POST /chat`
   - Input: `{ "message": "..." }`
-  - Output: `{ "answer": "..." }`
+  - Output: `{ "answer": "...", "citations": [...] }`
