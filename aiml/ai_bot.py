@@ -67,6 +67,13 @@ def _citation_only_answer(message: str, citations: list[dict[str, Any]]) -> str:
     return f'I found {count} relevant chunk(s) for "{message}".'
 
 
+def _chat_response(answer: str, citations: list[dict[str, Any]], source: str, backend_error: str = ""):
+    payload: dict[str, Any] = {"answer": answer, "citations": citations, "source": source}
+    if backend_error:
+        payload["backend_error"] = backend_error
+    return jsonify(payload)
+
+
 def _build_graph(model: ChatOpenAI):
     graph = StateGraph(BotState)
 
@@ -135,7 +142,22 @@ def chat():
     retrieval_error = str(retrieval.get("error", "")).strip()
 
     if retrieval_answer:
-        return jsonify({"answer": retrieval_answer, "citations": citations})
+        return _chat_response(retrieval_answer, citations, source="retrieval_answer")
+
+    if citations:
+        return _chat_response(_citation_only_answer(message, citations), citations, source="retrieval_citations")
+
+    if CHAT_REQUIRE_RETRIEVAL and not citations:
+        return jsonify(
+            {
+                "error": (
+                    "Retrieval backend did not return a result. "
+                    "Set BACKEND_ASK_URL to a reachable /api/graph/ask endpoint."
+                ),
+                "backend_ask_url": BACKEND_ASK_URL,
+                "backend_error": retrieval_error or "unknown",
+            }
+        ), 502
 
     if citations:
         return jsonify({"answer": _citation_only_answer(message, citations), "citations": citations})
@@ -169,8 +191,8 @@ def chat():
             "answer": "",
         }
     )
-    answer = result.get("answer", "")
-    return jsonify({"answer": answer, "citations": citations})
+    answer = str(result.get("answer", "")).strip()
+    return _chat_response(answer, citations, source="llm_fallback", backend_error=retrieval_error)
 
 
 if __name__ == "__main__":
