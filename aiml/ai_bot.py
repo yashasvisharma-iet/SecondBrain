@@ -16,6 +16,8 @@ load_dotenv()
 
 class BotState(TypedDict):
     user_message: str
+    retrieval_answer: str
+    retrieval_context: str
     answer: str
 
 
@@ -69,8 +71,9 @@ def _build_graph(model: ChatOpenAI):
                 HumanMessage(
                     content=(
                         f"User question: {state['user_message']}\n\n"
-                        f"Retrieved knowledge base context:\n{retrieval_context}\n\n"
-                        "Use the retrieved context when relevant. If context is missing or weak, say that clearly."
+                        f"Retrieved service answer:\n{state['retrieval_answer'] or 'None'}\n\n"
+                        f"Retrieved knowledge base context:\n{state['retrieval_context']}\n\n"
+                        "Use the retrieved context when relevant. If context is missing or weak, clearly say no matching notes were found."
                     )
                 ),
             ]
@@ -119,11 +122,34 @@ def chat():
     if not message:
         return jsonify({"error": "message is required"}), 400
 
-    result = chat_graph.invoke({"user_message": message, "answer": ""})
+    retrieval = _fetch_retrieval_context(message)
+    citations = retrieval.get("citations", [])
+    retrieval_answer = str(retrieval.get("answer", "")).strip()
+
+    if not citations and retrieval_answer:
+        return jsonify({"answer": retrieval_answer, "citations": []})
+
+    context_lines = []
+    for citation in citations[:5]:
+        page_id = citation.get("pageId", "unknown-page")
+        chunk_index = citation.get("chunkIndex", "?")
+        snippet = citation.get("snippet", "")
+        context_lines.append(f"- {page_id} | chunk {chunk_index}: {snippet}")
+
+    retrieval_context = "\n".join(context_lines) if context_lines else "No retrieved context available."
+
+    result = chat_graph.invoke(
+        {
+            "user_message": message,
+            "retrieval_answer": retrieval_answer,
+            "retrieval_context": retrieval_context,
+            "answer": "",
+        }
+    )
     answer = result.get("answer", "")
     retrieval = _fetch_retrieval_context(message)
 
-    return jsonify({"answer": answer, "citations": retrieval.get("citations", [])})
+    return jsonify({"answer": answer, "citations": citations})
 
 
 if __name__ == "__main__":

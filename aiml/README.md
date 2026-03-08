@@ -43,3 +43,4 @@ API:
 - `POST /chat`
   - Input: `{ "message": "..." }`
   - Output: `{ "answer": "...", "citations": [...] }`
+  - Behavior: if backend retrieval returns no citations, the bot returns backend `answer` directly (instead of a generic LLM fallback) so you can see the true retrieval status.

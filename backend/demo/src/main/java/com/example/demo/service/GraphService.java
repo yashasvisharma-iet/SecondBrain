@@ -1,14 +1,15 @@
 package com.example.demo.service;
 
+import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.dto.GraphDataDto;
 import com.example.demo.dto.GraphEdgeDto;
 import com.example.demo.dto.GraphNodeDto;
-import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -28,17 +29,20 @@ public class GraphService {
     private final PineconeVectorStoreService vectorStoreService;
     private final AimlEmbeddingClient aimlEmbeddingClient;
     private final double threshold;
+    private final double queryMinScore;
 
     public GraphService(NotionPageContentRepository pageRepository,
                         TextChunkRepository chunkRepository,
                         PineconeVectorStoreService vectorStoreService,
                         AimlEmbeddingClient aimlEmbeddingClient,
-                        @Value("${semantic.threshold:0.7}") double threshold) {
+                        @Value("${semantic.threshold:0.7}") double threshold,
+                        @Value("${semantic.query-min-score:0.35}") double queryMinScore) {
         this.pageRepository = pageRepository;
         this.chunkRepository = chunkRepository;
         this.vectorStoreService = vectorStoreService;
         this.aimlEmbeddingClient = aimlEmbeddingClient;
         this.threshold = threshold;
+        this.queryMinScore = queryMinScore;
     }
 
     public GraphDataDto getFeedGraph() {
@@ -83,24 +87,41 @@ public class GraphService {
         }
 
         List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorStoreService
-                .querySimilarChunks(queryEmbeddings.get(0), 5, 0.55);
-        if (matches.isEmpty()) {
-            return new AgentQueryResponse("I couldn't find matching notes in your vector database yet. Try different keywords or add more content.", List.of());
-        }
+                .querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore);
 
         Map<Long, String> pageIdByRawNoteId = pageRepository.findAll().stream()
                 .collect(Collectors.toMap(NotionPageContent::getId, NotionPageContent::getPageId));
 
-        List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
-                .sorted(Comparator.comparing(PineconeVectorStoreService.RetrievedChunkMatch::score).reversed())
-                .map(match -> new AgentQueryResponse.AgentCitationDto(
-                        pageIdByRawNoteId.getOrDefault(match.rawNoteId(), "orphan-note-" + match.rawNoteId()),
-                        match.chunkIndex(),
-                        abbreviate(match.content(), 180)))
-                .toList();
+        if (!matches.isEmpty()) {
+            List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
+                    .sorted(Comparator.comparing(PineconeVectorStoreService.RetrievedChunkMatch::score).reversed())
+                    .map(match -> new AgentQueryResponse.AgentCitationDto(
+                            pageIdByRawNoteId.getOrDefault(match.rawNoteId(), "orphan-note-" + match.rawNoteId()),
+                            match.chunkIndex(),
+                            abbreviate(match.content(), 180)))
+                    .toList();
 
-        String answer = "I found " + matches.size() + " relevant chunk(s) in your vector database for: \"" + normalizedQuery + "\".";
-        return new AgentQueryResponse(answer, citations);
+            String answer = "I found " + matches.size() + " relevant chunk(s) in your vector database for: \"" + normalizedQuery + "\".";
+            return new AgentQueryResponse(answer, citations);
+        }
+
+        List<TextChunk> lexicalMatches = chunkRepository.searchByContent(normalizedQuery, PageRequest.of(0, 5));
+        if (!lexicalMatches.isEmpty()) {
+            List<AgentQueryResponse.AgentCitationDto> citations = lexicalMatches.stream()
+                    .map(chunk -> new AgentQueryResponse.AgentCitationDto(
+                            pageIdByRawNoteId.getOrDefault(chunk.getRawNoteId(), "orphan-note-" + chunk.getRawNoteId()),
+                            chunk.getChunkIndex(),
+                            abbreviate(chunk.getContent(), 180)))
+                    .toList();
+
+            String answer = "I didn't get strong vector matches, but I found " + lexicalMatches.size()
+                    + " keyword match(es) in your notes for: \"" + normalizedQuery + "\".";
+            return new AgentQueryResponse(answer, citations);
+        }
+
+        return new AgentQueryResponse(
+                "I couldn't find matching notes in either vector search or keyword search yet. Try different keywords or add more content.",
+                List.of());
     }
 
     private String abbreviate(String content, int maxChars) {
