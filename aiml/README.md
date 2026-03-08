@@ -42,5 +42,9 @@ API:
 - `GET /health`
 - `POST /chat`
   - Input: `{ "message": "..." }`
-  - Output: `{ "answer": "...", "citations": [...] }`
-  - Behavior: if backend retrieval returns an `answer` (with or without citations), `/chat` returns that backend answer directly so frontend output stays aligned with `/api/graph/ask`. The LLM path is only used when backend retrieval is unreachable/empty.
+  - Output: `{ "answer": "...", "citations": [...], "source": "..." }`.
+  - If backend returns `answer`, `/chat` returns it directly.
+  - `source` is one of: `retrieval_answer`, `retrieval_citations`, `llm_fallback`.
+  - If backend returns citations without `answer`, `/chat` now returns a deterministic citation-based response (no generic LLM rewrite).
+  - Default behavior (`CHAT_REQUIRE_RETRIEVAL=true`): if backend retrieval does not return an answer/citation, `/chat` returns `502` with backend diagnostics instead of hallucinating an LLM-only answer.
+  - Optional fallback (`CHAT_REQUIRE_RETRIEVAL=false`): when retrieval is empty/unreachable, `/chat` uses the LLM path with whatever context is available.

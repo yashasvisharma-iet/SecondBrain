@@ -27,6 +27,7 @@ SYSTEM_PROMPT = (
 )
 
 BACKEND_ASK_URL = os.getenv("BACKEND_ASK_URL", "http://localhost:8080/api/graph/ask")
+CHAT_REQUIRE_RETRIEVAL = os.getenv("CHAT_REQUIRE_RETRIEVAL", "true").lower() in {"1", "true", "yes", "on"}
 
 
 def _fetch_retrieval_context(message: str) -> dict[str, Any]:
@@ -45,26 +46,38 @@ def _fetch_retrieval_context(message: str) -> dict[str, Any]:
             citations = data.get("citations", []) if isinstance(data, dict) else []
             answer = data.get("answer", "") if isinstance(data, dict) else ""
             return {"answer": answer, "citations": citations}
-    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-        return {"answer": "", "citations": []}
+    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        return {"answer": "", "citations": [], "error": str(exc)}
+
+def _citation_only_answer(message: str, citations: list[dict[str, Any]]) -> str:
+    if not citations:
+        return ""
+
+    top = citations[0]
+    snippet = str(top.get("snippet", "")).strip()
+    page_id = str(top.get("pageId", "unknown-page"))
+    count = len(citations)
+
+    if snippet:
+        return (
+            f'I found {count} relevant chunk(s) for "{message}". '
+            f'Best match from {page_id}: {snippet}'
+        )
+
+    return f'I found {count} relevant chunk(s) for "{message}".'
+
+
+def _chat_response(answer: str, citations: list[dict[str, Any]], source: str, backend_error: str = ""):
+    payload: dict[str, Any] = {"answer": answer, "citations": citations, "source": source}
+    if backend_error:
+        payload["backend_error"] = backend_error
+    return jsonify(payload)
 
 
 def _build_graph(model: ChatOpenAI):
     graph = StateGraph(BotState)
 
     def generate(state: BotState) -> BotState:
-        retrieval = _fetch_retrieval_context(state["user_message"])
-        citations = retrieval.get("citations", [])
-
-        context_lines = []
-        for citation in citations[:5]:
-            page_id = citation.get("pageId", "unknown-page")
-            chunk_index = citation.get("chunkIndex", "?")
-            snippet = citation.get("snippet", "")
-            context_lines.append(f"- {page_id} | chunk {chunk_index}: {snippet}")
-
-        retrieval_context = "\n".join(context_lines) if context_lines else "No retrieved context available."
-
         response = model.invoke(
             [
                 SystemMessage(content=SYSTEM_PROMPT),
@@ -107,6 +120,7 @@ def health():
             "provider": "openai" if chat_model else "missing-openai-key",
             "graph": "langgraph",
             "backend_ask_url": BACKEND_ASK_URL,
+            "chat_require_retrieval": CHAT_REQUIRE_RETRIEVAL,
         }
     )
 
@@ -125,9 +139,25 @@ def chat():
     retrieval = _fetch_retrieval_context(message)
     citations = retrieval.get("citations", [])
     retrieval_answer = str(retrieval.get("answer", "")).strip()
+    retrieval_error = str(retrieval.get("error", "")).strip()
 
     if retrieval_answer:
-        return jsonify({"answer": retrieval_answer, "citations": citations})
+        return _chat_response(retrieval_answer, citations, source="retrieval_answer")
+
+    if citations:
+        return _chat_response(_citation_only_answer(message, citations), citations, source="retrieval_citations")
+
+    if CHAT_REQUIRE_RETRIEVAL and not citations:
+        return jsonify(
+            {
+                "error": (
+                    "Retrieval backend did not return a result. "
+                    "Set BACKEND_ASK_URL to a reachable /api/graph/ask endpoint."
+                ),
+                "backend_ask_url": BACKEND_ASK_URL,
+                "backend_error": retrieval_error or "unknown",
+            }
+        ), 502
 
     context_lines = []
     for citation in citations[:5]:
@@ -146,10 +176,8 @@ def chat():
             "answer": "",
         }
     )
-    answer = result.get("answer", "")
-    retrieval = _fetch_retrieval_context(message)
-
-    return jsonify({"answer": answer, "citations": citations})
+    answer = str(result.get("answer", "")).strip()
+    return _chat_response(answer, citations, source="llm_fallback", backend_error=retrieval_error)
 
 
 if __name__ == "__main__":
