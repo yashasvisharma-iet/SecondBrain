@@ -27,6 +27,7 @@ SYSTEM_PROMPT = (
 )
 
 BACKEND_ASK_URL = os.getenv("BACKEND_ASK_URL", "http://localhost:8080/api/graph/ask")
+CHAT_REQUIRE_RETRIEVAL = os.getenv("CHAT_REQUIRE_RETRIEVAL", "true").lower() in {"1", "true", "yes", "on"}
 
 
 def _fetch_retrieval_context(message: str) -> dict[str, Any]:
@@ -45,8 +46,8 @@ def _fetch_retrieval_context(message: str) -> dict[str, Any]:
             citations = data.get("citations", []) if isinstance(data, dict) else []
             answer = data.get("answer", "") if isinstance(data, dict) else ""
             return {"answer": answer, "citations": citations}
-    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-        return {"answer": "", "citations": []}
+    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        return {"answer": "", "citations": [], "error": str(exc)}
 
 
 def _build_graph(model: ChatOpenAI):
@@ -107,6 +108,7 @@ def health():
             "provider": "openai" if chat_model else "missing-openai-key",
             "graph": "langgraph",
             "backend_ask_url": BACKEND_ASK_URL,
+            "chat_require_retrieval": CHAT_REQUIRE_RETRIEVAL,
         }
     )
 
@@ -125,9 +127,22 @@ def chat():
     retrieval = _fetch_retrieval_context(message)
     citations = retrieval.get("citations", [])
     retrieval_answer = str(retrieval.get("answer", "")).strip()
+    retrieval_error = str(retrieval.get("error", "")).strip()
 
     if retrieval_answer:
         return jsonify({"answer": retrieval_answer, "citations": citations})
+
+    if CHAT_REQUIRE_RETRIEVAL and not citations:
+        return jsonify(
+            {
+                "error": (
+                    "Retrieval backend did not return a result. "
+                    "Set BACKEND_ASK_URL to a reachable /api/graph/ask endpoint."
+                ),
+                "backend_ask_url": BACKEND_ASK_URL,
+                "backend_error": retrieval_error or "unknown",
+            }
+        ), 502
 
     context_lines = []
     for citation in citations[:5]:
