@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
-from typing import TypedDict
+from typing import Any, TypedDict
+from urllib import error, request as urllib_request
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
@@ -22,15 +24,55 @@ SYSTEM_PROMPT = (
     "suggest connections, and provide concise actionable next steps."
 )
 
+BACKEND_ASK_URL = os.getenv("BACKEND_ASK_URL", "http://localhost:8080/api/graph/ask")
+
+
+def _fetch_retrieval_context(message: str) -> dict[str, Any]:
+    payload = json.dumps({"query": message}).encode("utf-8")
+    req = urllib_request.Request(
+        BACKEND_ASK_URL,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib_request.urlopen(req, timeout=8) as response:
+            body = response.read().decode("utf-8")
+            data = json.loads(body)
+            citations = data.get("citations", []) if isinstance(data, dict) else []
+            answer = data.get("answer", "") if isinstance(data, dict) else ""
+            return {"answer": answer, "citations": citations}
+    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+        return {"answer": "", "citations": []}
+
 
 def _build_graph(model: ChatOpenAI):
     graph = StateGraph(BotState)
 
     def generate(state: BotState) -> BotState:
+        retrieval = _fetch_retrieval_context(state["user_message"])
+        citations = retrieval.get("citations", [])
+
+        context_lines = []
+        for citation in citations[:5]:
+            page_id = citation.get("pageId", "unknown-page")
+            chunk_index = citation.get("chunkIndex", "?")
+            snippet = citation.get("snippet", "")
+            context_lines.append(f"- {page_id} | chunk {chunk_index}: {snippet}")
+
+        retrieval_context = "\n".join(context_lines) if context_lines else "No retrieved context available."
+
         response = model.invoke(
             [
                 SystemMessage(content=SYSTEM_PROMPT),
-                HumanMessage(content=state["user_message"]),
+                HumanMessage(
+                    content=(
+                        f"User question: {state['user_message']}\n\n"
+                        f"Retrieved knowledge base context:\n{retrieval_context}\n\n"
+                        "Use the retrieved context when relevant. If context is missing or weak, say that clearly."
+                    )
+                ),
             ]
         )
 
@@ -61,6 +103,7 @@ def health():
             "status": "ok",
             "provider": "openai" if chat_model else "missing-openai-key",
             "graph": "langgraph",
+            "backend_ask_url": BACKEND_ASK_URL,
         }
     )
 
@@ -78,8 +121,9 @@ def chat():
 
     result = chat_graph.invoke({"user_message": message, "answer": ""})
     answer = result.get("answer", "")
+    retrieval = _fetch_retrieval_context(message)
 
-    return jsonify({"answer": answer})
+    return jsonify({"answer": answer, "citations": retrieval.get("citations", [])})
 
 
 if __name__ == "__main__":

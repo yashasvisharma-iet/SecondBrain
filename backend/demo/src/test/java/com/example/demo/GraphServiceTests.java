@@ -1,11 +1,13 @@
 package com.example.demo;
 
+import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.dto.GraphDataDto;
 import com.example.demo.dto.GraphEdgeDto;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+import com.example.demo.service.AimlEmbeddingClient;
 import com.example.demo.service.GraphService;
 import com.example.demo.service.PineconeVectorStoreService;
 import org.junit.jupiter.api.Test;
@@ -25,6 +27,7 @@ class GraphServiceTests {
         NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
         TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
         PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
+        AimlEmbeddingClient aimlEmbeddingClient = mock(AimlEmbeddingClient.class);
 
         NotionPageContent note1 = new NotionPageContent("n1", "Note one title\nBody");
         NotionPageContent note2 = new NotionPageContent("n2", "Note two title\nBody");
@@ -45,7 +48,7 @@ class GraphServiceTests {
                 new GraphEdgeDto("c-13", "c-11", 0.79)
         ));
 
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, 0.8);
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8);
         GraphDataDto data = graphService.getFeedGraph();
 
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("note")).hasSize(3);
@@ -56,6 +59,33 @@ class GraphServiceTests {
         assertThat(data.edges()).anyMatch(e -> e.source().equals("orphan-note-99") && e.target().equals("n2") && e.score() == 0.79);
 
         org.mockito.Mockito.verify(vectorStore).buildSemanticEdges(eq(List.of(c1, c1Second, c2, orphan)), eq(0.8));
+    }
+
+    @Test
+    void answerFromDatabaseUsesVectorRetrievalInsteadOfChunkRepositorySearch() {
+        NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
+        TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
+        PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
+        AimlEmbeddingClient aimlEmbeddingClient = mock(AimlEmbeddingClient.class);
+
+        NotionPageContent note = new NotionPageContent("page-1", "Vector note");
+        setId(note, 1L);
+        when(pageRepo.findAll()).thenReturn(List.of(note));
+        when(aimlEmbeddingClient.buildEmbeddings(List.of("what is retrieval augmented generation")))
+                .thenReturn(List.of(List.of(0.2, 0.3, 0.4)));
+        when(vectorStore.querySimilarChunks(List.of(0.2, 0.3, 0.4), 5, 0.55))
+                .thenReturn(List.of(new PineconeVectorStoreService.RetrievedChunkMatch(1L, 2,
+                        "RAG fetches semantically similar chunks from vector stores before generation.",
+                        99L,
+                        0.88)));
+
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8);
+        AgentQueryResponse response = graphService.answerFromDatabase("what is retrieval augmented generation");
+
+        assertThat(response.answer()).contains("vector database");
+        assertThat(response.citations()).hasSize(1);
+        assertThat(response.citations().getFirst().pageId()).isEqualTo("page-1");
+        assertThat(response.citations().getFirst().chunkIndex()).isEqualTo(2);
     }
 
     private void setId(NotionPageContent page, Long id) {

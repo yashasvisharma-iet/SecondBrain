@@ -148,6 +148,35 @@ public class PineconeVectorStoreService {
         return List.copyOf(deduplicated.values());
     }
 
+    public List<RetrievedChunkMatch> querySimilarChunks(List<Double> queryEmbedding, int topK, double minScore) {
+        if (queryEmbedding == null || queryEmbedding.isEmpty() || !isConfigured()) {
+            return List.of();
+        }
+
+        if (queryEmbedding.size() != dimensions) {
+            throw new IllegalArgumentException("Embedding dimension mismatch. Expected " + dimensions + " got " + queryEmbedding.size());
+        }
+
+        Map<String, Object> body = Map.of(
+                "namespace", namespace,
+                "vector", queryEmbedding,
+                "topK", topK,
+                "includeMetadata", true
+        );
+
+        QueryResponse response = post("/query", body, QueryResponse.class);
+        if (response == null || response.matches == null) {
+            return List.of();
+        }
+
+        return response.matches.stream()
+                .filter(match -> match != null && match.score != null && match.metadata != null)
+                .filter(match -> match.score >= minScore)
+                .map(this::toRetrievedChunkMatch)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
 
     private boolean isEligibleForSimilarity(String content) {
         if (content == null) {
@@ -209,5 +238,60 @@ public class PineconeVectorStoreService {
 
         @JsonProperty("score")
         Double score;
+
+        @JsonProperty("metadata")
+        Map<String, Object> metadata;
+    }
+
+    private RetrievedChunkMatch toRetrievedChunkMatch(QueryMatch match) {
+        Long rawNoteId = toLong(match.metadata.get("rawNoteId"));
+        Integer chunkIndex = toInteger(match.metadata.get("chunkIndex"));
+        String content = toStringValue(match.metadata.get("content"));
+        Long chunkId = toLong(match.metadata.get("chunkId"));
+
+        if (rawNoteId == null || chunkIndex == null || content == null) {
+            return null;
+        }
+
+        return new RetrievedChunkMatch(rawNoteId, chunkIndex, content, chunkId, match.score);
+    }
+
+    private Long toLong(Object value) {
+        if (value instanceof Number number) {
+            return number.longValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Long.parseLong(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException ignored) {
+                return null;
+            }
+        }
+        return null;
+    }
+
+    private String toStringValue(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = String.valueOf(value).trim();
+        return text.isEmpty() ? null : text;
+    }
+
+    public record RetrievedChunkMatch(Long rawNoteId, Integer chunkIndex, String content, Long chunkId, Double score) {
     }
 }

@@ -8,11 +8,11 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -26,15 +26,18 @@ public class GraphService {
     private final NotionPageContentRepository pageRepository;
     private final TextChunkRepository chunkRepository;
     private final PineconeVectorStoreService vectorStoreService;
+    private final AimlEmbeddingClient aimlEmbeddingClient;
     private final double threshold;
 
     public GraphService(NotionPageContentRepository pageRepository,
                         TextChunkRepository chunkRepository,
                         PineconeVectorStoreService vectorStoreService,
+                        AimlEmbeddingClient aimlEmbeddingClient,
                         @Value("${semantic.threshold:0.7}") double threshold) {
         this.pageRepository = pageRepository;
         this.chunkRepository = chunkRepository;
         this.vectorStoreService = vectorStoreService;
+        this.aimlEmbeddingClient = aimlEmbeddingClient;
         this.threshold = threshold;
     }
 
@@ -71,22 +74,32 @@ public class GraphService {
             return new AgentQueryResponse("Please enter a question for me to search your knowledge base.", List.of());
         }
 
-        List<TextChunk> matches = chunkRepository.searchByContent(normalizedQuery, PageRequest.of(0, 5));
+        List<List<Double>> queryEmbeddings = aimlEmbeddingClient.buildEmbeddings(List.of(normalizedQuery));
+        if (queryEmbeddings.isEmpty()) {
+            return new AgentQueryResponse(
+                    "I couldn't generate a query embedding right now, so vector retrieval is unavailable.",
+                    List.of()
+            );
+        }
+
+        List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorStoreService
+                .querySimilarChunks(queryEmbeddings.get(0), 5, 0.55);
         if (matches.isEmpty()) {
-            return new AgentQueryResponse("I couldn't find matching notes in your database yet. Try different keywords or add more content.", List.of());
+            return new AgentQueryResponse("I couldn't find matching notes in your vector database yet. Try different keywords or add more content.", List.of());
         }
 
         Map<Long, String> pageIdByRawNoteId = pageRepository.findAll().stream()
                 .collect(Collectors.toMap(NotionPageContent::getId, NotionPageContent::getPageId));
 
         List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
-                .map(chunk -> new AgentQueryResponse.AgentCitationDto(
-                        pageIdByRawNoteId.getOrDefault(chunk.getRawNoteId(), "orphan-note-" + chunk.getRawNoteId()),
-                        chunk.getChunkIndex(),
-                        abbreviate(chunk.getContent(), 180)))
+                .sorted(Comparator.comparing(PineconeVectorStoreService.RetrievedChunkMatch::score).reversed())
+                .map(match -> new AgentQueryResponse.AgentCitationDto(
+                        pageIdByRawNoteId.getOrDefault(match.rawNoteId(), "orphan-note-" + match.rawNoteId()),
+                        match.chunkIndex(),
+                        abbreviate(match.content(), 180)))
                 .toList();
 
-        String answer = "I found " + matches.size() + " relevant chunk(s) in your database for: \"" + normalizedQuery + "\".";
+        String answer = "I found " + matches.size() + " relevant chunk(s) in your vector database for: \"" + normalizedQuery + "\".";
         return new AgentQueryResponse(answer, citations);
     }
 
