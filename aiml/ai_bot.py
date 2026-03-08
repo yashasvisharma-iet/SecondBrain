@@ -159,6 +159,21 @@ def chat():
             }
         ), 502
 
+    if citations:
+        return jsonify({"answer": _citation_only_answer(message, citations), "citations": citations})
+
+    if CHAT_REQUIRE_RETRIEVAL and not citations:
+        return jsonify(
+            {
+                "error": (
+                    "Retrieval backend did not return a result. "
+                    "Set BACKEND_ASK_URL to a reachable /api/graph/ask endpoint."
+                ),
+                "backend_ask_url": BACKEND_ASK_URL,
+                "backend_error": retrieval_error or "unknown",
+            }
+        ), 502
+
     context_lines = []
     for citation in citations[:5]:
         page_id = citation.get("pageId", "unknown-page")
