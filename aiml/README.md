@@ -43,5 +43,7 @@ API:
 - `POST /chat`
   - Input: `{ "message": "..." }`
   - Output: `{ "answer": "...", "citations": [...] }` when retrieval succeeds.
+  - If backend returns `answer`, `/chat` returns it directly.
+  - If backend returns citations without `answer`, `/chat` now returns a deterministic citation-based response (no generic LLM rewrite).
   - Default behavior (`CHAT_REQUIRE_RETRIEVAL=true`): if backend retrieval does not return an answer/citation, `/chat` returns `502` with backend diagnostics instead of hallucinating an LLM-only answer.
   - Optional fallback (`CHAT_REQUIRE_RETRIEVAL=false`): when retrieval is empty/unreachable, `/chat` uses the LLM path with whatever context is available.

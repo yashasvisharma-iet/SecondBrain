@@ -49,23 +49,28 @@ def _fetch_retrieval_context(message: str) -> dict[str, Any]:
     except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
         return {"answer": "", "citations": [], "error": str(exc)}
 
+def _citation_only_answer(message: str, citations: list[dict[str, Any]]) -> str:
+    if not citations:
+        return ""
+
+    top = citations[0]
+    snippet = str(top.get("snippet", "")).strip()
+    page_id = str(top.get("pageId", "unknown-page"))
+    count = len(citations)
+
+    if snippet:
+        return (
+            f'I found {count} relevant chunk(s) for "{message}". '
+            f'Best match from {page_id}: {snippet}'
+        )
+
+    return f'I found {count} relevant chunk(s) for "{message}".'
+
 
 def _build_graph(model: ChatOpenAI):
     graph = StateGraph(BotState)
 
     def generate(state: BotState) -> BotState:
-        retrieval = _fetch_retrieval_context(state["user_message"])
-        citations = retrieval.get("citations", [])
-
-        context_lines = []
-        for citation in citations[:5]:
-            page_id = citation.get("pageId", "unknown-page")
-            chunk_index = citation.get("chunkIndex", "?")
-            snippet = citation.get("snippet", "")
-            context_lines.append(f"- {page_id} | chunk {chunk_index}: {snippet}")
-
-        retrieval_context = "\n".join(context_lines) if context_lines else "No retrieved context available."
-
         response = model.invoke(
             [
                 SystemMessage(content=SYSTEM_PROMPT),
@@ -132,6 +137,9 @@ def chat():
     if retrieval_answer:
         return jsonify({"answer": retrieval_answer, "citations": citations})
 
+    if citations:
+        return jsonify({"answer": _citation_only_answer(message, citations), "citations": citations})
+
     if CHAT_REQUIRE_RETRIEVAL and not citations:
         return jsonify(
             {
@@ -162,8 +170,6 @@ def chat():
         }
     )
     answer = result.get("answer", "")
-    retrieval = _fetch_retrieval_context(message)
-
     return jsonify({"answer": answer, "citations": citations})
 
 
