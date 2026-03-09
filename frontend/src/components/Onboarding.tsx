@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -41,6 +41,34 @@ const Onboarding = () => {
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [notionConnected, setNotionConnected] = useState(false);
   const [googleDocsConnected, setGoogleDocsConnected] = useState(false);
+  const [googleDocs, setGoogleDocs] = useState<Array<{ id: string; name: string; modifiedTime: string }>>([]);
+  const [selectedGoogleDocIds, setSelectedGoogleDocIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (sessionStorage.getItem("google_docs_connected") === "1") {
+      setGoogleDocsConnected(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!googleDocsConnected || step !== 3) {
+      return;
+    }
+
+    fetch("http://localhost:8080/api/google-docs/list", {
+      credentials: "include",
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          throw new Error("Unable to fetch documents");
+        }
+        const docs = await res.json();
+        setGoogleDocs(Array.isArray(docs) ? docs : []);
+      })
+      .catch(() => {
+        toast.error("Unable to fetch Google Docs. Please reconnect and try again.");
+      });
+  }, [googleDocsConnected, step]);
 
   const progress = (step / totalSteps) * 100;
 
@@ -226,15 +254,65 @@ const Onboarding = () => {
 
                   {selectedApps.includes("Google Docs") ? (
                     googleDocsConnected ? (
-                      <Badge className="gradient-primary text-white">
-                        Google Docs Connected
-                      </Badge>
+                      <div className="space-y-3 text-left">
+                        <Badge className="gradient-primary text-white">
+                          Google Docs Connected
+                        </Badge>
+                        <p className="text-xs text-muted-foreground">
+                          Select docs to ingest now (you can add more later).
+                        </p>
+                        <div className="max-h-52 overflow-y-auto space-y-2 rounded-md border p-3">
+                          {googleDocs.length === 0 ? (
+                            <p className="text-xs text-muted-foreground">No docs found yet.</p>
+                          ) : (
+                            googleDocs.map((doc) => (
+                              <label key={doc.id} className="flex items-center gap-2 text-xs">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedGoogleDocIds.includes(doc.id)}
+                                  onChange={() => {
+                                    setSelectedGoogleDocIds((prev) =>
+                                      prev.includes(doc.id)
+                                        ? prev.filter((id) => id !== doc.id)
+                                        : [...prev, doc.id]
+                                    );
+                                  }}
+                                />
+                                <span className="truncate">{doc.name}</span>
+                              </label>
+                            ))
+                          )}
+                        </div>
+                        <Button
+                          className="w-full"
+                          variant="secondary"
+                          disabled={selectedGoogleDocIds.length === 0}
+                          onClick={() => {
+                            fetch("http://localhost:8080/api/google-docs/ingest-selected", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              credentials: "include",
+                              body: JSON.stringify({ docIds: selectedGoogleDocIds }),
+                            })
+                              .then((res) => {
+                                if (!res.ok) {
+                                  throw new Error();
+                                }
+                                toast.success("Selected Google Docs ingested");
+                              })
+                              .catch(() => {
+                                toast.error("Failed to ingest selected docs");
+                              });
+                          }}
+                        >
+                          Ingest Selected Docs
+                        </Button>
+                      </div>
                     ) : (
                       <Button
                         className="w-full"
                         onClick={() => {
-                          setGoogleDocsConnected(true);
-                          toast.success("Google Docs connected");
+                          window.location.href = "http://localhost:8080/oauth2/authorization/google";
                         }}
                       >
                         Connect Google Docs
