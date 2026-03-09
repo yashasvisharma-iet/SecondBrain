@@ -14,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -73,6 +74,7 @@ class GraphServiceTests {
         NotionPageContent note = new NotionPageContent("page-1", "Vector note");
         setId(note, 1L);
         when(pageRepo.findAll()).thenReturn(List.of(note));
+        when(pageRepo.findById(1L)).thenReturn(Optional.of(note));
         when(aimlEmbeddingClient.buildEmbeddings(List.of("what is retrieval augmented generation")))
                 .thenReturn(List.of(List.of(0.2, 0.3, 0.4)));
         when(vectorStore.querySimilarChunks(List.of(0.2, 0.3, 0.4), 5, 0.35))
@@ -88,6 +90,7 @@ class GraphServiceTests {
         assertThat(response.citations()).hasSize(1);
         assertThat(response.citations().getFirst().pageId()).isEqualTo("page-1");
         assertThat(response.citations().getFirst().chunkIndex()).isEqualTo(2);
+        assertThat(response.citations().getFirst().source()).isEqualTo("Notion");
     }
 
     @Test
@@ -104,6 +107,7 @@ class GraphServiceTests {
                 "Attention-based neural networks (transformers) are strong for NLP tasks.");
 
         when(pageRepo.findAll()).thenReturn(List.of(note));
+        when(pageRepo.findById(14L)).thenReturn(Optional.of(note));
         when(aimlEmbeddingClient.buildEmbeddings(List.of("what did i write about transformers")))
                 .thenReturn(List.of(List.of(0.2, 0.3, 0.4)));
         when(vectorStore.querySimilarChunks(List.of(0.2, 0.3, 0.4), 5, 0.35)).thenReturn(List.of());

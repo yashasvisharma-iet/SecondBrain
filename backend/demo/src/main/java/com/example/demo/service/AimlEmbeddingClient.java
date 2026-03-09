@@ -4,6 +4,8 @@ import com.example.demo.dto.AimlRelationRequest;
 import com.example.demo.dto.AimlRelationResponse;
 import com.example.demo.dto.AimlEmbeddingRequest;
 import com.example.demo.dto.AimlEmbeddingResponse;
+import com.example.demo.dto.AimlSummaryRequest;
+import com.example.demo.dto.AimlSummaryResponse;
 import com.example.demo.dto.GraphEdgeDto;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
@@ -68,6 +70,32 @@ public class AimlEmbeddingClient {
         } catch (RestClientException ex) {
             System.err.println("AIML embedding service unavailable, skipping vector persistence: " + ex.getMessage());
             return List.of();
+        }
+    }
+
+    public String summarizeText(String text) {
+        if (text == null || text.isBlank()) {
+            return "I need note content before I can summarize it.";
+        }
+
+        try {
+            RequestEntity<AimlSummaryRequest> request = RequestEntity
+                    .post(URI.create(baseUrl + "/summarize"))
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .body(new AimlSummaryRequest(text));
+
+            ResponseEntity<AimlSummaryResponse> response = restTemplate.exchange(
+                    request,
+                    AimlSummaryResponse.class
+            );
+
+            AimlSummaryResponse body = response.getBody();
+            return body == null || body.summary() == null || body.summary().isBlank()
+                    ? "I couldn't generate a summary right now."
+                    : body.summary();
+        } catch (RestClientException ex) {
+            System.err.println("AIML summary service unavailable: " + ex.getMessage());
+            return "I couldn't reach the AI summarizer right now.";
         }
     }
 }
