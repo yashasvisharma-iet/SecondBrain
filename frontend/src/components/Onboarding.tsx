@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,21 +34,49 @@ const NOTION_AUTH_URL =
 
 const Onboarding = () => {
   const navigate = useNavigate();
-  const [step, setStep] = useState(1);
+  const location = useLocation();
+  const callbackState = (location.state as { notionConnected?: boolean; proceedToGoogle?: boolean } | null) ?? null;
+  const [step, setStep] = useState<number>(() => {
+    if (callbackState?.proceedToGoogle) {
+      return 3;
+    }
+    const savedStep = sessionStorage.getItem("onboarding_step");
+    const parsedStep = Number(savedStep);
+    return [1, 2, 3].includes(parsedStep) ? parsedStep : 1;
+  });
   const totalSteps = 3;
 
   // New states
-  const [selectedApps, setSelectedApps] = useState<string[]>([]);
-  const [notionConnected, setNotionConnected] = useState(false);
-  const [googleDocsConnected, setGoogleDocsConnected] = useState(false);
+  const [selectedApps, setSelectedApps] = useState<string[]>(() => {
+    const savedApps = sessionStorage.getItem("onboarding_selected_apps");
+    if (!savedApps) return [];
+    try {
+      const parsed = JSON.parse(savedApps);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  });
+  const notionConnected =
+    callbackState?.notionConnected || sessionStorage.getItem("notion_connected") === "1"
+  ;
+  const googleDocsConnected = sessionStorage.getItem("google_docs_connected") === "1";
   const [googleDocs, setGoogleDocs] = useState<Array<{ id: string; name: string; modifiedTime: string }>>([]);
   const [selectedGoogleDocIds, setSelectedGoogleDocIds] = useState<string[]>([]);
 
   useEffect(() => {
-    if (sessionStorage.getItem("google_docs_connected") === "1") {
-      setGoogleDocsConnected(true);
+    sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
+  }, [selectedApps]);
+
+  useEffect(() => {
+    sessionStorage.setItem("onboarding_step", String(step));
+  }, [step]);
+
+  useEffect(() => {
+    if (callbackState?.notionConnected) {
+      sessionStorage.setItem("notion_connected", "1");
     }
-  }, []);
+  }, [callbackState?.notionConnected]);
 
   useEffect(() => {
     if (!googleDocsConnected || step !== 3) {
@@ -204,13 +232,14 @@ const Onboarding = () => {
                       Notion Connected
                     </Badge>
                   ) : (
-                    <Button
-                      className="w-full"
-                      onClick={() => {
-                        setNotionConnected(true);
+                      <Button
+                        className="w-full"
+                        onClick={() => {
+                        sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
+                        sessionStorage.setItem("onboarding_step", "2");
                         window.location.href = NOTION_AUTH_URL;
-                      }}
-                    >
+                        }}
+                      >
                       Connect Notion
                     </Button>
                   )}
