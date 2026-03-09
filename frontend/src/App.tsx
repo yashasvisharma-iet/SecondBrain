@@ -10,6 +10,7 @@ import Splash from "./components/Splash";
 import {Feed} from "./pages/Feed";
 import Onboarding from "./components/Onboarding";
 import NotionCallback from "./pages/auth/NotionCallback";
+import GoogleCallback from "./pages/auth/GoogleCallback";
 
 const LayoutWithNav = ({ children }: { children: React.ReactNode }) => (
   <>
@@ -27,6 +28,7 @@ const App = () => (
       {/* ✅ Removed BrowserRouter here */}
       <Routes>
         <Route path="/auth/notion/callback" element={<NotionCallback />}/>
+        <Route path="/auth/google/callback" element={<GoogleCallback />}/>
         <Route path="/" element={<Splash />} />
         {/* <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} /> */}
