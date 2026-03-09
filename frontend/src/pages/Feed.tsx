@@ -50,11 +50,17 @@ type AgentCitation = {
   pageId: string
   chunkIndex: number
   snippet: string
+  source: string
+  syncedAt: string
 }
 
 type AgentResponse = {
   answer: string
   citations: AgentCitation[]
+}
+
+type NoteSummaryResponse = {
+  summary: string
 }
 
 const connections: AppConnection[] = [
@@ -74,6 +80,8 @@ export function Feed() {
   const [agentQuery, setAgentQuery] = useState('')
   const [agentLoading, setAgentLoading] = useState(false)
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryText, setSummaryText] = useState('')
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = useMemo(() => {
@@ -157,6 +165,10 @@ export function Feed() {
 
     void ingestNotes()
   }, [notes])
+
+  useEffect(() => {
+    setSummaryText('')
+  }, [selectedNoteId])
 
   const handleAddNote = () => {
     const noteNumber = notes.length + 1
@@ -263,6 +275,32 @@ export function Feed() {
       setAgentResponse({ answer: 'Could not reach the agent endpoint. Make sure the backend is running.', citations: [] })
     } finally {
       setAgentLoading(false)
+    }
+  }
+
+  const handleSummarizeNote = async () => {
+    if (!selectedNote?.id) return
+
+    setSummaryLoading(true)
+    try {
+      const response = await fetch('http://localhost:8080/api/graph/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ pageId: selectedNote.id }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Summary request failed')
+      }
+
+      const data = (await response.json()) as NoteSummaryResponse
+      setSummaryText(data.summary)
+    } catch (error) {
+      console.error('Failed to summarize note', error)
+      setSummaryText('Could not summarize this note right now. Please check if backend + AIML services are running.')
+    } finally {
+      setSummaryLoading(false)
     }
   }
 
@@ -456,13 +494,19 @@ export function Feed() {
                   <Button type="button" variant="secondary" className="justify-start" onClick={() => setActiveMode('notes')}>
                     Continue where I left off
                   </Button>
-                  <Button type="button" variant="secondary" className="justify-start">
-                    Revise this with AI
+                  <Button type="button" variant="secondary" className="justify-start" onClick={handleSummarizeNote} disabled={summaryLoading}>
+                    ✨ {summaryLoading ? 'Summarizing...' : 'Summarize with AI'}
                   </Button>
                   <Button type="button" variant="secondary" className="justify-start" onClick={handleAddNote}>
                     Add linked note
                   </Button>
                 </div>
+                {summaryText && (
+                  <div className="mt-3 rounded-xl border border-[#e6e1f2] bg-[#faf8ff] p-3 text-sm text-[#2f2147]">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#675f78]">AI Summary</p>
+                    <p className="whitespace-pre-wrap">{summaryText}</p>
+                  </div>
+                )}
               </>
             ) : (
               <p className="text-sm text-[#675f78]">Select a note or graph node to view full content and suggested next actions.</p>
@@ -481,8 +525,11 @@ export function Feed() {
       </Button>
 
       {isAgentOpen && (
-        <section className="absolute bottom-24 right-6 z-20 w-[min(420px,calc(100vw-2rem))] rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur">
-          <h3 className="text-base font-semibold text-[#2f2147]">AI Agent</h3>
+        <section className="absolute bottom-24 right-6 z-20 flex max-h-[75vh] w-[min(420px,calc(100vw-2rem))] flex-col rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur">
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-[#2f2147]">AI Agent</h3>
+            <button type="button" className="rounded-md px-2 py-1 text-lg leading-none text-[#675f78] hover:bg-[#ece7ff]" onClick={() => setIsAgentOpen(false)} aria-label="Close AI agent">×</button>
+          </div>
           <p className="mt-1 text-sm text-[#675f78]">Ask a question and I&apos;ll search matching chunks from your database.</p>
           <div className="mt-3 flex gap-2">
             <Input
@@ -496,16 +543,16 @@ export function Feed() {
           </div>
 
           {agentResponse && (
-            <div className="mt-3 space-y-3 rounded-xl bg-[#f8f6ff] p-3 text-sm text-[#2f2147]">
-              <p>{agentResponse.answer}</p>
+            <div className="mt-3 space-y-3 overflow-y-auto rounded-xl bg-[#f8f6ff] p-3 text-sm text-[#2f2147]">
+              <p className="whitespace-pre-wrap">{agentResponse.answer}</p>
               {agentResponse.citations.length > 0 && (
                 <ul className="space-y-2">
                   {agentResponse.citations.map((citation, index) => (
                     <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-2">
                       <p className="text-xs font-medium text-[#5d5470]">
-                        {citation.pageId} · chunk {citation.chunkIndex}
+                        {citation.source} / {citation.pageId} · {citation.syncedAt} · chunk {citation.chunkIndex}
                       </p>
-                      <p>{citation.snippet}</p>
+                      <p className="whitespace-pre-wrap">{citation.snippet}</p>
                     </li>
                   ))}
                 </ul>

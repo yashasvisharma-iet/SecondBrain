@@ -48,6 +48,14 @@ class EmbeddingResponse(BaseModel):
     embeddings: List[List[float]]
 
 
+class SummaryRequest(BaseModel):
+    text: str = Field(default="")
+
+
+class SummaryResponse(BaseModel):
+    summary: str
+
+
 def _normalize_embeddings(vectors: list[list[float]]) -> np.ndarray:
     array = np.asarray(vectors, dtype=float)
     norms = np.linalg.norm(array, axis=1, keepdims=True)
@@ -75,6 +83,28 @@ def _fallback_embed_texts(texts: list[str]) -> np.ndarray:
             vec[bucket] += 1.0
         vectors.append(vec.tolist())
     return _normalize_embeddings(vectors)
+
+
+def _summarize_text(text: str) -> str:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return "I need note content before I can summarize it."
+
+    if openai_client:
+        completion = openai_client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "Summarize user notes in 4-6 concise bullet points. Keep key actions and facts."},
+                {"role": "user", "content": cleaned},
+            ],
+            temperature=0.2,
+        )
+        content = completion.choices[0].message.content if completion.choices else ""
+        return (content or "").strip() or "I couldn't generate a summary right now."
+
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    preview = " ".join(sentences[:3]).strip()
+    return preview if preview else cleaned[:360]
 
 
 @app.get("/health")
@@ -130,3 +160,8 @@ def embeddings(payload: EmbeddingRequest) -> EmbeddingResponse:
 
     vectors = _embed_texts(texts)
     return EmbeddingResponse(embeddings=vectors.tolist())
+
+
+@app.post("/summarize", response_model=SummaryResponse)
+def summarize(payload: SummaryRequest) -> SummaryResponse:
+    return SummaryResponse(summary=_summarize_text(payload.text))

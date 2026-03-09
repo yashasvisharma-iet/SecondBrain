@@ -18,11 +18,15 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 public class GraphService {
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+            .withZone(ZoneId.systemDefault());
 
     private final NotionPageContentRepository pageRepository;
     private final TextChunkRepository chunkRepository;
@@ -89,29 +93,27 @@ public class GraphService {
         List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorStoreService
                 .querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore);
 
-        Map<Long, String> pageIdByRawNoteId = pageRepository.findAll().stream()
-                .collect(Collectors.toMap(NotionPageContent::getId, NotionPageContent::getPageId));
-
         if (!matches.isEmpty()) {
             List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
                     .sorted(Comparator.comparing(PineconeVectorStoreService.RetrievedChunkMatch::score).reversed())
-                    .map(match -> new AgentQueryResponse.AgentCitationDto(
-                            pageIdByRawNoteId.getOrDefault(match.rawNoteId(), "orphan-note-" + match.rawNoteId()),
+                    .map(match -> toCitation(
+                            pageRepository.findById(match.rawNoteId()).orElse(null),
                             match.chunkIndex(),
-                            abbreviate(match.content(), 180)))
+                            abbreviate(match.content(), 360)))
                     .toList();
 
-            String answer = "I found " + matches.size() + " relevant chunk(s) in your vector database for: \"" + normalizedQuery + "\".";
+            String answer = "Yes — I found " + matches.size() + " relevant note chunk(s) for \"" + normalizedQuery
+                    + "\". Here are the matching sayings with source and date.";
             return new AgentQueryResponse(answer, citations);
         }
 
         List<TextChunk> lexicalMatches = chunkRepository.searchByContent(normalizedQuery, PageRequest.of(0, 5));
         if (!lexicalMatches.isEmpty()) {
             List<AgentQueryResponse.AgentCitationDto> citations = lexicalMatches.stream()
-                    .map(chunk -> new AgentQueryResponse.AgentCitationDto(
-                            pageIdByRawNoteId.getOrDefault(chunk.getRawNoteId(), "orphan-note-" + chunk.getRawNoteId()),
+                    .map(chunk -> toCitation(
+                            pageRepository.findById(chunk.getRawNoteId()).orElse(null),
                             chunk.getChunkIndex(),
-                            abbreviate(chunk.getContent(), 180)))
+                            abbreviate(chunk.getContent(), 360)))
                     .toList();
 
             String answer = "I didn't get strong vector matches, but I found " + lexicalMatches.size()
@@ -122,6 +124,40 @@ public class GraphService {
         return new AgentQueryResponse(
                 "I couldn't find matching notes in either vector search or keyword search yet. Try different keywords or add more content.",
                 List.of());
+    }
+
+    public String summarizePage(String pageId) {
+        if (pageId == null || pageId.isBlank()) {
+            return "Please select a note to summarize.";
+        }
+
+        return pageRepository.findByPageId(pageId)
+                .map(page -> aimlEmbeddingClient.summarizeText(page.getContent()))
+                .orElse("I couldn't find that note in the database yet.");
+    }
+
+    private AgentQueryResponse.AgentCitationDto toCitation(NotionPageContent page, Integer chunkIndex, String snippet) {
+        String pageId = page != null ? page.getPageId() : "unknown-source";
+        return new AgentQueryResponse.AgentCitationDto(
+                pageId,
+                chunkIndex,
+                snippet,
+                detectSource(pageId),
+                formatSyncedDate(page));
+    }
+
+    private String detectSource(String pageId) {
+        if (pageId != null && pageId.startsWith("gdoc:")) {
+            return "Google Docs";
+        }
+        return "Notion";
+    }
+
+    private String formatSyncedDate(NotionPageContent page) {
+        if (page == null || page.getSyncedAt() == null) {
+            return "unknown date";
+        }
+        return DATE_FORMATTER.format(page.getSyncedAt());
     }
 
     private String abbreviate(String content, int maxChars) {

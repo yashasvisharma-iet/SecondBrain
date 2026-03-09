@@ -3,6 +3,8 @@ package com.example.demo.controller;
 import com.example.demo.dto.AgentQueryRequest;
 import com.example.demo.dto.AgentQueryResponse;
 import com.example.demo.dto.GraphDataDto;
+import com.example.demo.dto.NoteSummaryRequest;
+import com.example.demo.dto.NoteSummaryResponse;
 import com.example.demo.service.GraphService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,5 +30,10 @@ public class GraphController {
     @PostMapping("/ask")
     public AgentQueryResponse askAgent(@RequestBody AgentQueryRequest request) {
         return graphService.answerFromDatabase(request.query());
+    }
+
+    @PostMapping("/summarize")
+    public NoteSummaryResponse summarize(@RequestBody NoteSummaryRequest request) {
+        return new NoteSummaryResponse(graphService.summarizePage(request.pageId()));
     }
 }
