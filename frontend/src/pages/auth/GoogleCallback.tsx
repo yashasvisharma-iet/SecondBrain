@@ -7,8 +7,9 @@ export default function GoogleCallback() {
 
   useEffect(() => {
     sessionStorage.setItem("google_docs_connected", "1");
+    sessionStorage.setItem("onboarding_step", "3");
     toast.success("Google Docs connected");
-    navigate("/onboarding");
+    navigate("/onboarding", { replace: true });
   }, [navigate]);
 
   return <div className="p-8 text-center">Connecting Google Docs…</div>;

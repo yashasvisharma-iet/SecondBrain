@@ -26,7 +26,10 @@ export default function NotionCallback() {
     const handledKey = `notion_handled_${code}`;
     if (sessionStorage.getItem(handledKey)) {
       // already handled this code — navigate back to onboarding
-      navigate("/onboarding", { state: { notionConnected: true } });
+      navigate("/onboarding", {
+        replace: true,
+        state: { notionConnected: true, proceedToGoogle: true },
+      });
       return;
     }
     sessionStorage.setItem(handledKey, "1");
@@ -43,15 +46,19 @@ export default function NotionCallback() {
     })
       .then(async (res) => {
         if (!res.ok) throw new Error();
-        navigate("/feed", {
-          state: { notionConnected: true },
+        sessionStorage.setItem("notion_connected", "1");
+        sessionStorage.setItem("onboarding_step", "3");
+        toast.success("Notion connected");
+        navigate("/onboarding", {
+          replace: true,
+          state: { notionConnected: true, proceedToGoogle: true },
         });
       })
       .catch(() => {
         toast.error("Failed to connect Notion");
         navigate("/onboarding");
       });
-  }, []);
+  }, [navigate, params]);
 
   return <div className="p-8 text-center">Connecting Notion…</div>;
 }
