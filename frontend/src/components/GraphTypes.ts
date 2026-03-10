@@ -4,6 +4,7 @@ export type GraphNode = SimulationNodeDatum & {
   id: string
   label: string
   type: 'note' | 'chunk' | 'topic'
+  genre?: string | null
 }
 
 export type GraphEdge = {

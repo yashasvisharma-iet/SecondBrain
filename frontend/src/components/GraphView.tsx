@@ -10,6 +10,8 @@ type Props = {
   onNodeSelect?: (nodeId: string) => void
 }
 
+const MAX_LABEL_LENGTH = 34
+
 export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null)
   const [size, setSize] = useState({ width, height })
@@ -52,26 +54,16 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
         d3
           .forceLink<GraphNode, GraphEdge>(data.edges)
           .id((d) => d.id)
-          .distance((d) => {
-            const source = typeof d.source === 'string' ? null : d.source
-            const target = typeof d.target === 'string' ? null : d.target
-            if (source?.type === 'topic' || target?.type === 'topic') return 150
-            return 100
-          })
-          .strength((d) => {
-            const source = typeof d.source === 'string' ? null : d.source
-            const target = typeof d.target === 'string' ? null : d.target
-            if (source?.type === 'topic' || target?.type === 'topic') return 0.95
-            return 0.7
-          }),
+          .distance(145)
+          .strength((d) => Math.min(Math.max(d.score ?? 0.2, 0.2), 0.95)),
       )
-      .force('charge', d3.forceManyBody().strength((d) => (d.type === 'topic' ? -900 : -350)))
+      .force('charge', d3.forceManyBody().strength(-560))
       .force('center', d3.forceCenter(canvasWidth / 2, canvasHeight / 2))
-      .force('collision', d3.forceCollide<GraphNode>().radius((d) => (d.type === 'topic' ? 44 : 22)).strength(0.9))
+      .force('collision', d3.forceCollide<GraphNode>().radius(42).strength(1))
 
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.85, 2])
+      .scaleExtent([0.75, 2.2])
       .translateExtent([
         [0, 0],
         [canvasWidth, canvasHeight],
@@ -84,31 +76,25 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
 
     const link = graphLayer
       .append('g')
-      .attr('stroke', '#7c8698')
-      .attr('stroke-opacity', 0.8)
+      .attr('stroke', '#6f7483')
+      .attr('stroke-opacity', 0.68)
       .selectAll('line')
       .data(data.edges)
       .join('line')
-      .attr('stroke-width', (d) => Math.max((d.score ?? 0.35) * 3, 1.4))
+      .attr('stroke-width', (d) => Math.max((d.score ?? 0.25) * 4, 1.5))
 
     const node = graphLayer
       .append('g')
       .selectAll('circle')
       .data(data.nodes)
       .join('circle')
-      .attr('r', (d) => (d.type === 'topic' ? 24 : 12))
-      .attr('fill', (d) => {
-        if (d.type === 'topic') return '#f59e0b'
-        if (d.type === 'note') return '#2563eb'
-        return '#10b981'
-      })
-      .attr('stroke', (d) => (d.type === 'topic' ? '#d97706' : '#ffffff'))
-      .attr('stroke-width', (d) => (d.type === 'topic' ? 2.5 : 1.2))
+      .attr('r', 14)
+      .attr('fill', '#2563eb')
+      .attr('stroke', '#ffffff')
+      .attr('stroke-width', 1.5)
       .style('cursor', 'pointer')
       .on('click', (_, nodeData) => {
-        if (nodeData.type !== 'topic') {
-          onNodeSelect?.(nodeData.id)
-        }
+        onNodeSelect?.(nodeData.id)
       })
       .call(
         d3
@@ -118,24 +104,33 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
           .on('end', dragEnded),
       )
 
+    node
+      .append('title')
+      .text((d) => `${d.label}${d.genre ? `\nGenre: ${d.genre}` : ''}`)
+
     const label = graphLayer
       .append('g')
       .selectAll('text')
       .data(data.nodes)
       .join('text')
-      .text((d) => d.label)
-      .attr('font-size', (d) => (d.type === 'topic' ? 12 : 10))
-      .attr('font-weight', (d) => (d.type === 'topic' ? 700 : 400))
+      .text((d) => truncateLabel(d.label))
+      .attr('font-size', 12)
+      .attr('font-weight', 600)
       .attr('fill', '#0f172a')
-      .attr('text-anchor', (d) => (d.type === 'topic' ? 'middle' : 'start'))
-      .attr('dx', (d) => (d.type === 'topic' ? 0 : 14))
-      .attr('dy', (d) => (d.type === 'topic' ? 4 : 4))
+      .attr('stroke', 'rgba(255,255,255,0.92)')
+      .attr('stroke-width', 4)
+      .attr('paint-order', 'stroke')
+      .attr('text-anchor', 'start')
+      .attr('dx', 18)
+      .attr('dy', 4)
       .style('cursor', 'pointer')
       .on('click', (_, nodeData) => {
-        if (nodeData.type !== 'topic') {
-          onNodeSelect?.(nodeData.id)
-        }
+        onNodeSelect?.(nodeData.id)
       })
+
+    label
+      .append('title')
+      .text((d) => `${d.label}${d.genre ? `\nGenre: ${d.genre}` : ''}`)
 
     simulation.on('tick', () => {
       link
@@ -176,4 +171,10 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
   }, [data, onNodeSelect, size])
 
   return <svg ref={svgRef} width={size.width} height={size.height} className="h-full w-full" />
+}
+
+function truncateLabel(text: string) {
+  if (!text) return 'Untitled note'
+  if (text.length <= MAX_LABEL_LENGTH) return text
+  return `${text.slice(0, MAX_LABEL_LENGTH - 3)}...`
 }

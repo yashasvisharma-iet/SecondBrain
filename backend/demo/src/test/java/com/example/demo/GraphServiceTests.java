@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 class GraphServiceTests {
 
     @Test
-    void buildsTopicAndNoteNodesAndAggregatesSemanticEdgesAtNoteLevel() {
+    void buildsNoteOnlyGraphAndAggregatesSemanticEdgesAtNoteLevel() {
         NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
         TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
         PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
@@ -45,26 +45,25 @@ class GraphServiceTests {
 
         when(pageRepo.findAllByOrderBySyncedAtDesc()).thenReturn(List.of(note1, note2));
         when(chunkRepo.findAllByOrderByRawNoteIdAscChunkIndexAsc()).thenReturn(List.of(c1, c1Second, c2, orphan));
-        when(vectorStore.buildSemanticEdges(any(), eq(0.8))).thenReturn(List.of(
+        when(vectorStore.buildSemanticEdges(any(), eq(0.45))).thenReturn(List.of(
                 new GraphEdgeDto("c-10", "c-11", 0.91),
                 new GraphEdgeDto("c-12", "c-11", 0.87),
                 new GraphEdgeDto("c-13", "c-11", 0.79)
         ));
 
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8, 0.35);
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.45, 0.35);
         GraphDataDto data = graphService.getFeedGraph();
 
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("note")).hasSize(3);
-        assertThat(data.nodes()).filteredOn(node -> node.type().equals("topic")).isNotEmpty();
+        assertThat(data.nodes()).filteredOn(node -> node.type().equals("topic")).isEmpty();
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("chunk")).isEmpty();
+        assertThat(data.nodes()).allMatch(node -> node.genre() != null && !node.genre().isBlank());
 
-        assertThat(data.edges()).hasSizeGreaterThanOrEqualTo(5);
+        assertThat(data.edges()).hasSize(2);
         assertThat(data.edges()).anyMatch(e -> e.source().equals("n1") && e.target().equals("n2") && e.score() == 0.91);
         assertThat(data.edges()).anyMatch(e -> e.source().equals("orphan-note-99") && e.target().equals("n2") && e.score() == 0.79);
-        assertThat(data.edges()).anyMatch(e -> e.target().equals("n1") && e.source().startsWith("topic:"));
-        assertThat(data.edges()).anyMatch(e -> e.target().equals("n2") && e.source().startsWith("topic:"));
 
-        verify(vectorStore).buildSemanticEdges(eq(List.of(c1, c1Second, c2, orphan)), eq(0.8));
+        verify(vectorStore).buildSemanticEdges(eq(List.of(c1, c1Second, c2, orphan)), eq(0.45));
     }
 
     @Test
@@ -86,10 +85,10 @@ class GraphServiceTests {
                         99L,
                         0.88)));
 
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8, 0.35);
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.45, 0.35);
         AgentQueryResponse response = graphService.answerFromDatabase("what is retrieval augmented generation");
 
-        assertThat(response.answer()).contains("vector database");
+        assertThat(response.answer()).contains("relevant note chunk");
         assertThat(response.citations()).hasSize(1);
         assertThat(response.citations().getFirst().pageId()).isEqualTo("page-1");
         assertThat(response.citations().getFirst().chunkIndex()).isEqualTo(2);
@@ -117,7 +116,7 @@ class GraphServiceTests {
         when(chunkRepo.searchByContent(eq("what did i write about transformers"), any(Pageable.class)))
                 .thenReturn(List.of(lexicalHit));
 
-        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.8, 0.35);
+        GraphService graphService = new GraphService(pageRepo, chunkRepo, vectorStore, aimlEmbeddingClient, 0.45, 0.35);
         AgentQueryResponse response = graphService.answerFromDatabase("what did i write about transformers");
 
         assertThat(response.answer()).contains("keyword match");
