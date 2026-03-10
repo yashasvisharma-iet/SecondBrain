@@ -13,11 +13,15 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.function.Function;
@@ -27,6 +31,13 @@ import java.util.stream.Collectors;
 public class GraphService {
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd")
             .withZone(ZoneId.systemDefault());
+
+    private static final Set<String> STOP_WORDS = Set.of(
+            "a", "an", "and", "are", "as", "at", "be", "but", "by", "for", "from", "had", "has", "have",
+            "he", "her", "his", "i", "if", "in", "into", "is", "it", "its", "me", "my", "not", "of", "on",
+            "or", "our", "she", "so", "that", "the", "their", "them", "there", "they", "this", "to", "was",
+            "we", "were", "with", "you", "your"
+    );
 
     private final NotionPageContentRepository pageRepository;
     private final TextChunkRepository chunkRepository;
@@ -58,6 +69,9 @@ public class GraphService {
 
         List<GraphNodeDto> nodes = new ArrayList<>();
         List<GraphEdgeDto> noteEdges = new ArrayList<>();
+        List<GraphEdgeDto> topicEdges = new ArrayList<>();
+        Map<String, String> noteTopicByNodeId = new HashMap<>();
+        Set<String> topicIds = new LinkedHashSet<>();
 
         HashSet<Long> seenRawNoteIds = new HashSet<>();
         for (TextChunk chunk : chunks) {
@@ -68,12 +82,39 @@ public class GraphService {
                 String noteId = page != null ? noteNodeId(page) : fallbackNoteNodeId(rawNoteId);
                 String noteLabel = page != null ? buildNoteLabel(page) : "Imported note " + rawNoteId;
                 nodes.add(new GraphNodeDto(noteId, noteLabel, "note"));
+
+                String topicLabel = inferTopicLabel(page, chunksForRawNote(chunks, rawNoteId));
+                String topicId = topicNodeId(topicLabel);
+                noteTopicByNodeId.put(noteId, topicId);
+                topicIds.add(topicId + "::" + topicLabel);
+                topicEdges.add(new GraphEdgeDto(topicId, noteId, 1.0));
             }
         }
 
-        noteEdges.addAll(buildNoteSemanticEdges(chunks, pageById));
+        for (String topic : topicIds) {
+            String[] pieces = topic.split("::", 2);
+            nodes.add(new GraphNodeDto(pieces[0], pieces[1], "topic"));
+        }
 
-        return new GraphDataDto(nodes, noteEdges);
+        noteEdges.addAll(buildNoteSemanticEdges(chunks, pageById));
+        if (noteEdges.isEmpty()) {
+            noteEdges.addAll(buildFallbackLexicalEdges(chunks, pageById));
+        }
+
+        List<GraphEdgeDto> allEdges = new ArrayList<>(topicEdges);
+        allEdges.addAll(noteEdges);
+
+        if (noteEdges.isEmpty()) {
+            allEdges.addAll(connectTopicsBySharedContext(noteTopicByNodeId));
+        }
+
+        return new GraphDataDto(nodes, allEdges);
+    }
+
+    private List<TextChunk> chunksForRawNote(List<TextChunk> chunks, Long rawNoteId) {
+        return chunks.stream()
+                .filter(chunk -> rawNoteId.equals(chunk.getRawNoteId()))
+                .toList();
     }
 
     public AgentQueryResponse answerFromDatabase(String query) {
@@ -223,5 +264,115 @@ public class GraphService {
 
         String firstLine = content.lines().findFirst().orElse("Untitled note").trim();
         return firstLine.length() > 64 ? firstLine.substring(0, 64) + "..." : firstLine;
+    }
+
+    private String inferTopicLabel(NotionPageContent page, List<TextChunk> noteChunks) {
+        String combined = new StringBuilder()
+                .append(page != null && page.getContent() != null ? page.getContent() : "")
+                .append(" ")
+                .append(noteChunks.stream().map(TextChunk::getContent).collect(Collectors.joining(" ")))
+                .toString()
+                .toLowerCase();
+
+        if (combined.contains("internship") || combined.contains("study") || combined.contains("exam")
+                || combined.contains("project") || combined.contains("presentation")) {
+            return "Career & Study";
+        }
+        if (combined.contains("mom") || combined.contains("dad") || combined.contains("home")
+                || combined.contains("family") || combined.contains("parents")) {
+            return "Family & Safety";
+        }
+        if (combined.contains("friend") || combined.contains("relationship") || combined.contains("hangout")
+                || combined.contains("love")) {
+            return "Relationships";
+        }
+        if (combined.contains("everest") || combined.contains("travel") || combined.contains("trip")
+                || combined.contains("hiking") || combined.contains("hobbies")) {
+            return "Goals & Adventure";
+        }
+
+        return "General Reflection";
+    }
+
+    private String topicNodeId(String topicLabel) {
+        return "topic:" + topicLabel.toLowerCase().replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+    }
+
+    private List<GraphEdgeDto> buildFallbackLexicalEdges(List<TextChunk> chunks,
+                                                          Map<Long, NotionPageContent> pageById) {
+        Map<Long, String> noteText = chunks.stream()
+                .collect(Collectors.groupingBy(TextChunk::getRawNoteId,
+                        Collectors.mapping(TextChunk::getContent, Collectors.joining(" "))));
+
+        List<Long> noteIds = new ArrayList<>(noteText.keySet());
+        List<GraphEdgeDto> edges = new ArrayList<>();
+
+        for (int i = 0; i < noteIds.size(); i++) {
+            for (int j = i + 1; j < noteIds.size(); j++) {
+                Long first = noteIds.get(i);
+                Long second = noteIds.get(j);
+                double score = lexicalSimilarity(noteText.get(first), noteText.get(second));
+                if (score >= 0.12) {
+                    edges.add(new GraphEdgeDto(
+                            resolveNoteNodeId(pageById.get(first), first),
+                            resolveNoteNodeId(pageById.get(second), second),
+                            score
+                    ));
+                }
+            }
+        }
+
+        return edges.stream()
+                .sorted(Comparator.comparing((GraphEdgeDto edge) -> edge.score() != null ? edge.score() : 0.0).reversed())
+                .limit(30)
+                .toList();
+    }
+
+    private double lexicalSimilarity(String left, String right) {
+        Set<String> leftTokens = tokenize(left);
+        Set<String> rightTokens = tokenize(right);
+        if (leftTokens.isEmpty() || rightTokens.isEmpty()) {
+            return 0;
+        }
+
+        Set<String> overlap = new HashSet<>(leftTokens);
+        overlap.retainAll(rightTokens);
+        if (overlap.isEmpty()) {
+            return 0;
+        }
+
+        Set<String> union = new HashSet<>(leftTokens);
+        union.addAll(rightTokens);
+        return (double) overlap.size() / union.size();
+    }
+
+    private Set<String> tokenize(String content) {
+        if (content == null || content.isBlank()) {
+            return Set.of();
+        }
+
+        return Arrays.stream(content.toLowerCase().split("[^a-z0-9]+"))
+                .filter(token -> token.length() > 2)
+                .filter(token -> !STOP_WORDS.contains(token))
+                .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private List<GraphEdgeDto> connectTopicsBySharedContext(Map<String, String> noteTopicByNodeId) {
+        Map<String, Long> counts = noteTopicByNodeId.values().stream()
+                .collect(Collectors.groupingBy(Function.identity(), LinkedHashMap::new, Collectors.counting()));
+        List<String> topicIds = new ArrayList<>(counts.keySet());
+        List<GraphEdgeDto> topicEdges = new ArrayList<>();
+
+        for (int i = 0; i < topicIds.size(); i++) {
+            for (int j = i + 1; j < topicIds.size(); j++) {
+                String left = topicIds.get(i);
+                String right = topicIds.get(j);
+                double score = Math.min(counts.get(left), counts.get(right))
+                        / (double) Math.max(counts.get(left), counts.get(right));
+                topicEdges.add(new GraphEdgeDto(left, right, score));
+            }
+        }
+
+        return topicEdges;
     }
 }

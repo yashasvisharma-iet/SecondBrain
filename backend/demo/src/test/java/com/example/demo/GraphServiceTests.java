@@ -26,7 +26,7 @@ import static org.mockito.Mockito.when;
 class GraphServiceTests {
 
     @Test
-    void buildsOnlyNoteNodesAndAggregatesSemanticEdgesAtNoteLevel() {
+    void buildsTopicAndNoteNodesAndAggregatesSemanticEdgesAtNoteLevel() {
         NotionPageContentRepository pageRepo = mock(NotionPageContentRepository.class);
         TextChunkRepository chunkRepo = mock(TextChunkRepository.class);
         PineconeVectorStoreService vectorStore = mock(PineconeVectorStoreService.class);
@@ -55,11 +55,14 @@ class GraphServiceTests {
         GraphDataDto data = graphService.getFeedGraph();
 
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("note")).hasSize(3);
+        assertThat(data.nodes()).filteredOn(node -> node.type().equals("topic")).isNotEmpty();
         assertThat(data.nodes()).filteredOn(node -> node.type().equals("chunk")).isEmpty();
 
-        assertThat(data.edges()).hasSize(2);
+        assertThat(data.edges()).hasSizeGreaterThanOrEqualTo(5);
         assertThat(data.edges()).anyMatch(e -> e.source().equals("n1") && e.target().equals("n2") && e.score() == 0.91);
         assertThat(data.edges()).anyMatch(e -> e.source().equals("orphan-note-99") && e.target().equals("n2") && e.score() == 0.79);
+        assertThat(data.edges()).anyMatch(e -> e.target().equals("n1") && e.source().startsWith("topic:"));
+        assertThat(data.edges()).anyMatch(e -> e.target().equals("n2") && e.source().startsWith("topic:"));
 
         verify(vectorStore).buildSemanticEdges(eq(List.of(c1, c1Second, c2, orphan)), eq(0.8));
     }

@@ -3,7 +3,7 @@ import { SimulationNodeDatum } from 'd3-force'
 export type GraphNode = SimulationNodeDatum & {
   id: string
   label: string
-  type: 'note' | 'chunk'
+  type: 'note' | 'chunk' | 'topic'
 }
 
 export type GraphEdge = {
