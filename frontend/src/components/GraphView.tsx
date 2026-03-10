@@ -11,6 +11,8 @@ type Props = {
 }
 
 const MAX_LABEL_LENGTH = 34
+const DEFAULT_LINK_DISTANCE = 95
+const DEFAULT_NODE_REPULSION = -260
 
 export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Props) {
   const svgRef = useRef<SVGSVGElement | null>(null)
@@ -54,19 +56,21 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
         d3
           .forceLink<GraphNode, GraphEdge>(data.edges)
           .id((d) => d.id)
-          .distance(145)
+          .distance(DEFAULT_LINK_DISTANCE)
           .strength((d) => Math.min(Math.max(d.score ?? 0.2, 0.2), 0.95)),
       )
-      .force('charge', d3.forceManyBody().strength(-560))
+      .force('charge', d3.forceManyBody().strength(DEFAULT_NODE_REPULSION))
       .force('center', d3.forceCenter(canvasWidth / 2, canvasHeight / 2))
-      .force('collision', d3.forceCollide<GraphNode>().radius(42).strength(1))
+      .force('x', d3.forceX(canvasWidth / 2).strength(0.07))
+      .force('y', d3.forceY(canvasHeight / 2).strength(0.07))
+      .force('collision', d3.forceCollide<GraphNode>().radius(32).strength(1))
 
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.75, 2.2])
+      .scaleExtent([0.35, 3])
       .translateExtent([
-        [0, 0],
-        [canvasWidth, canvasHeight],
+        [-canvasWidth * 2, -canvasHeight * 2],
+        [canvasWidth * 3, canvasHeight * 3],
       ])
       .on('zoom', (event) => {
         graphLayer.attr('transform', event.transform)
@@ -131,6 +135,14 @@ export function GraphView({ data, width = 800, height = 600, onNodeSelect }: Pro
     label
       .append('title')
       .text((d) => `${d.label}${d.genre ? `\nGenre: ${d.genre}` : ''}`)
+
+    label.call(
+      d3
+        .drag<SVGTextElement, GraphNode>()
+        .on('start', dragStarted)
+        .on('drag', dragged)
+        .on('end', dragEnded),
+    )
 
     simulation.on('tick', () => {
       link
