@@ -13,7 +13,7 @@ pinecone.namespace=secondbrain
 vector.store.dimensions=1536
 
 # cosine similarity threshold + max matches per chunk for chunk-to-chunk semantic edges
-semantic.threshold=0.7
+semantic.threshold=0.45
 semantic.top-k=8
 
 # Google OAuth2 (required for Google Docs onboarding)

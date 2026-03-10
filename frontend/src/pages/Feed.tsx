@@ -14,6 +14,13 @@ type Note = {
   createdAt: string
 }
 
+type GraphNodeMeta = {
+  id: string
+  label: string
+  type: 'note' | 'chunk' | 'topic'
+  genre?: string | null
+}
+
 const initialNotes: Note[] = [
   {
     id: 'n1',
@@ -94,6 +101,9 @@ export function Feed() {
   }, [notes, searchTerm])
 
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], edges: [] })
+  const graphNodeById = useMemo(() => {
+    return new Map(graphData.nodes.map((node) => [node.id, node as GraphNodeMeta]))
+  }, [graphData.nodes])
 
   const refreshGraph = async () => {
     try {
@@ -212,6 +222,7 @@ export function Feed() {
 
   const handleGraphSelect = async (nodeId: string) => {
     const parsedId = nodeId.startsWith('c-') ? nodeId.slice(2) : nodeId
+    const graphNode = graphNodeById.get(parsedId)
     const existingNote = notes.find((item) => item.id === parsedId)
 
     if (existingNote) {
@@ -236,8 +247,7 @@ export function Feed() {
 
       const importedNote: Note = {
         id: data.pageId,
-
-        title: resolveTitleFromContent(data.content ?? ''),
+        title: graphNode?.label || resolveTitleFromContent(data.content ?? ''),
         content: data.content ?? '',
         createdAt: 'Imported',
       }
@@ -376,7 +386,14 @@ export function Feed() {
                       selectedNoteId === note.id ? 'border-[#7a58f2] bg-[#f1ecff]' : 'border-transparent bg-white hover:bg-[#f6f3ff]'
                     }`}
                   >
-                    <p className="font-medium text-[#2f2147]">{note.title}</p>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <p className="font-medium text-[#2f2147]">{note.title}</p>
+                      {graphNodeById.get(note.id)?.genre && (
+                        <Badge variant="secondary" className="rounded-md bg-[#ece7ff] text-[10px] font-semibold text-[#4b3f8d]">
+                          {graphNodeById.get(note.id)?.genre}
+                        </Badge>
+                      )}
+                    </div>
                     <p className="line-clamp-2 text-sm text-[#675f78]">{note.content || 'Empty note'}</p>
                   </button>
                 ))
@@ -486,6 +503,11 @@ export function Feed() {
             {isDetailOpen && selectedNote ? (
               <>
                 <p className="text-lg font-semibold text-[#2f2147]">{selectedNote.title || 'Untitled'}</p>
+                {graphNodeById.get(selectedNote.id)?.genre && (
+                  <Badge variant="secondary" className="mb-2 mt-1 w-fit rounded-md bg-[#ece7ff] text-xs font-semibold text-[#4b3f8d]">
+                    Genre: {graphNodeById.get(selectedNote.id)?.genre}
+                  </Badge>
+                )}
                 <p className="mb-3 text-xs text-[#675f78]">Source: {selectedNote.createdAt === 'Imported' ? 'Imported node' : 'Local note'}</p>
                 <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-[#f8f6ff] p-3 text-sm leading-6 text-[#2f2147]">
                   {selectedNote.content || 'This note is empty. Add details to enrich your graph memory.'}
