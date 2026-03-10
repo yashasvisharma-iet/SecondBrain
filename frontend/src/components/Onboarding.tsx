@@ -12,6 +12,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { NOTION_CLIENT_ID, NOTION_REDIRECT_URI, apiUrl } from "@/lib/config";
 
 const fadeSlide = {
   hidden: { opacity: 0, x: 40 },
@@ -29,8 +30,9 @@ const NOTE_APPS = [
   "Other",
 ];
 
-const NOTION_AUTH_URL =
-  "https://api.notion.com/v1/oauth/authorize?client_id=2ffd872b-594c-8031-9655-003752eb0403&response_type=code&owner=user&redirect_uri=http%3A%2F%2Flocalhost%3A5173%2Fauth%2Fnotion%2Fcallback";
+const NOTION_AUTH_URL = NOTION_CLIENT_ID
+  ? `https://api.notion.com/v1/oauth/authorize?client_id=${encodeURIComponent(NOTION_CLIENT_ID)}&response_type=code&owner=user&redirect_uri=${encodeURIComponent(NOTION_REDIRECT_URI)}`
+  : "";
 
 const Onboarding = () => {
   const navigate = useNavigate();
@@ -83,7 +85,7 @@ const Onboarding = () => {
       return;
     }
 
-    fetch("http://localhost:8080/api/google-docs/list", {
+    fetch(apiUrl("/api/google-docs/list"), {
       credentials: "include",
     })
       .then(async (res) => {
@@ -237,7 +239,11 @@ const Onboarding = () => {
                         onClick={() => {
                         sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
                         sessionStorage.setItem("onboarding_step", "2");
-                        window.location.href = NOTION_AUTH_URL;
+                          if (!NOTION_AUTH_URL) {
+                            toast.error("Missing Notion client configuration");
+                            return;
+                          }
+                          window.location.href = NOTION_AUTH_URL;
                         }}
                       >
                       Connect Notion
@@ -317,7 +323,7 @@ const Onboarding = () => {
                           variant="secondary"
                           disabled={selectedGoogleDocIds.length === 0}
                           onClick={() => {
-                            fetch("http://localhost:8080/api/google-docs/ingest-selected", {
+                            fetch(apiUrl("/api/google-docs/ingest-selected"), {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               credentials: "include",
@@ -341,7 +347,7 @@ const Onboarding = () => {
                       <Button
                         className="w-full"
                         onClick={() => {
-                          window.location.href = "http://localhost:8080/oauth2/authorization/google";
+                          window.location.href = apiUrl("/oauth2/authorization/google");
                         }}
                       >
                         Connect Google Docs

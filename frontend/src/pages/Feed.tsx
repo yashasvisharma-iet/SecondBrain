@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { apiUrl } from '@/lib/config'
 
 type Note = {
   id: string
@@ -107,7 +108,7 @@ export function Feed() {
 
   const refreshGraph = async () => {
     try {
-      const response = await fetch('http://localhost:8080/api/graph/feed', { credentials: 'include' })
+      const response = await fetch(apiUrl('/api/graph/feed'), { credentials: 'include' })
       if (!response.ok) return
       const data = (await response.json()) as GraphData
       setGraphData(data)
@@ -118,7 +119,7 @@ export function Feed() {
 
   const ingestNote = async (note: Pick<Note, 'id' | 'title' | 'content'>) => {
     const contentToIngest = note.content.trim() || note.title.trim() || 'Untitled note'
-    const response = await fetch('http://localhost:8080/api/notion/ingestRaw', {
+    const response = await fetch(apiUrl('/api/notion/ingestRaw'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -234,8 +235,8 @@ export function Feed() {
 
     try {
       const sourceEndpoint = parsedId.startsWith('gdoc:')
-        ? `http://localhost:8080/api/google-docs/doc/${encodeURIComponent(parsedId.slice(5))}`
-        : `http://localhost:8080/api/notion/page/${encodeURIComponent(parsedId)}`
+        ? apiUrl(`/api/google-docs/doc/${encodeURIComponent(parsedId.slice(5))}`)
+        : apiUrl(`/api/notion/page/${encodeURIComponent(parsedId)}`)
 
       const response = await fetch(sourceEndpoint, {
         credentials: 'include',
@@ -267,7 +268,7 @@ export function Feed() {
 
     setAgentLoading(true)
     try {
-      const response = await fetch('http://localhost:8080/api/graph/ask', {
+      const response = await fetch(apiUrl('/api/graph/ask'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -305,7 +306,7 @@ export function Feed() {
 
     setSummaryLoading(true)
     try {
-      const response = await fetch('http://localhost:8080/api/graph/summarize', {
+      const response = await fetch(apiUrl('/api/graph/summarize'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
