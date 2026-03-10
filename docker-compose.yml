@@ -1,0 +1,70 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+        VITE_NOTION_CLIENT_ID: ${VITE_NOTION_CLIENT_ID:-}
+        VITE_NOTION_REDIRECT_URI: ${VITE_NOTION_REDIRECT_URI:-http://localhost/auth/notion/callback}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend/demo
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-secondbrain}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-secondbrain}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-secondbrain}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      AIML_BASE_URL: http://aiml-embeddings:8001
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost}
+      APP_FRONTEND_GOOGLE_CALLBACK_URL: ${APP_FRONTEND_GOOGLE_CALLBACK_URL:-http://localhost/auth/google/callback}
+      PINECONE_API_KEY: ${PINECONE_API_KEY:-}
+      PINECONE_INDEX_HOST: ${PINECONE_INDEX_HOST:-}
+      PINECONE_NAMESPACE: ${PINECONE_NAMESPACE:-secondbrain}
+      VECTOR_STORE_DIMENSIONS: ${VECTOR_STORE_DIMENSIONS:-1536}
+      SEMANTIC_THRESHOLD: ${SEMANTIC_THRESHOLD:-0.45}
+      SEMANTIC_TOP_K: ${SEMANTIC_TOP_K:-8}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_SCOPE: openid,profile,email,https://www.googleapis.com/auth/documents.readonly,https://www.googleapis.com/auth/drive.metadata.readonly
+      SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost/login/oauth2/code/google}
+    depends_on:
+      - postgres
+      - aiml-embeddings
+
+  aiml-embeddings:
+    build: ./aiml
+    command: uvicorn main:app --host 0.0.0.0 --port 8001
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+
+  aiml-chat:
+    build: ./aiml
+    command: python ai_bot.py
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_CHAT_MODEL: ${OPENAI_CHAT_MODEL:-gpt-4o-mini}
+      BACKEND_ASK_URL: http://backend:8080/api/graph/ask
+      CHAT_REQUIRE_RETRIEVAL: ${CHAT_REQUIRE_RETRIEVAL:-true}
+    depends_on:
+      - backend
+    ports:
+      - "8002:8002"
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-secondbrain}
+      POSTGRES_USER: ${POSTGRES_USER:-secondbrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secondbrain}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:
