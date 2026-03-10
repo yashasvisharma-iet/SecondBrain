@@ -42,6 +42,7 @@ const sidebarItems = [
   { id: 'knowledge', label: 'Knowledge', icon: '📚' },
   { id: 'connections', label: 'Connections', icon: '🔗' },
   { id: 'insights', label: 'Insights', icon: '📈' },
+  { id: 'ai-agent', label: 'AI Agent', icon: '✨' },
 ]
 
 type WorkspaceMode = (typeof sidebarItems)[number]['id']
@@ -83,7 +84,6 @@ export function Feed() {
   const [searchTerm, setSearchTerm] = useState('')
   const [activeMode, setActiveMode] = useState<WorkspaceMode>('brain-map')
   const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [isAgentOpen, setIsAgentOpen] = useState(false)
   const [agentQuery, setAgentQuery] = useState('')
   const [agentLoading, setAgentLoading] = useState(false)
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null)
@@ -271,7 +271,7 @@ export function Feed() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ query: agentQuery.trim() }),
+        body: JSON.stringify({ query: agentQuery.trim(), pageId: selectedNote?.id ?? null }),
       })
 
       if (!response.ok) {
@@ -286,6 +286,18 @@ export function Feed() {
     } finally {
       setAgentLoading(false)
     }
+  }
+
+  const openNoteFromAgent = (noteId: string) => {
+    const existingNote = notes.find((note) => note.id === noteId)
+    if (existingNote) {
+      setSelectedNoteId(existingNote.id)
+      setIsDetailOpen(true)
+      setActiveMode('ai-agent')
+      return
+    }
+
+    void handleGraphSelect(noteId)
   }
 
   const handleSummarizeNote = async () => {
@@ -367,6 +379,7 @@ export function Feed() {
           {activeMode === 'knowledge' && 'Review distilled concepts from your current note collection.'}
           {activeMode === 'connections' && 'Inspect how ideas are linked across notes and chunks.'}
           {activeMode === 'insights' && 'Get revision-oriented prompts to resume exactly where you left off.'}
+          {activeMode === 'ai-agent' && 'OpenAI-powered memory assistant that reasons over matched chunks and your selected note context.'}
         </p>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
@@ -492,6 +505,55 @@ export function Feed() {
             </section>
           )}
 
+          {activeMode === 'ai-agent' && (
+            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/90 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-[#2f2147]">AI Agent (full chat)</h2>
+                  <p className="mt-1 text-sm text-[#675f78]">
+                    Hi 👋 Yes, you wrote something about this. I&apos;ll use OpenAI reasoning on top of chunk matching so you get context-aware answers.
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Input
+                  value={agentQuery}
+                  onChange={(event) => setAgentQuery(event.target.value)}
+                  placeholder="e.g. what did I write about architecture?"
+                />
+                <Button type="button" onClick={handleAgentAsk} disabled={agentLoading || !agentQuery.trim()}>
+                  {agentLoading ? 'Thinking...' : 'Ask AI'}
+                </Button>
+              </div>
+              <p className="mt-2 text-xs text-[#675f78]">
+                {selectedNote ? `Current note context: ${selectedNote.title}` : 'Tip: select a note for stronger contextual answers.'}
+              </p>
+
+              {agentResponse && (
+                <div className="mt-4 space-y-3 overflow-y-auto rounded-xl bg-[#f8f6ff] p-4 text-sm text-[#2f2147]">
+                  <p className="whitespace-pre-wrap">{agentResponse.answer}</p>
+                  {agentResponse.citations.length > 0 && (
+                    <ul className="space-y-2">
+                      {agentResponse.citations.map((citation, index) => (
+                        <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-3">
+                          <div className="mb-2 flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-[#5d5470]">
+                              {citation.source} / {citation.pageId} · {citation.syncedAt} · chunk {citation.chunkIndex}
+                            </p>
+                            <Button type="button" size="sm" variant="secondary" onClick={() => openNoteFromAgent(citation.pageId)}>
+                              Open note link
+                            </Button>
+                          </div>
+                          <p className="whitespace-pre-wrap">{citation.snippet}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Node detail</h2>
@@ -537,52 +599,6 @@ export function Feed() {
         </div>
       </main>
 
-      <Button
-        type="button"
-        className="absolute bottom-6 right-6 rounded-full bg-[#5f48d8] px-6 py-5 text-base shadow-lg hover:bg-[#523dc0]"
-        title="Open AI agent"
-        onClick={() => setIsAgentOpen((open) => !open)}
-      >
-        AI Agent
-      </Button>
-
-      {isAgentOpen && (
-        <section className="absolute bottom-24 right-6 z-20 flex max-h-[75vh] w-[min(420px,calc(100vw-2rem))] flex-col rounded-2xl border border-white/60 bg-white/95 p-4 shadow-2xl backdrop-blur">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-[#2f2147]">AI Agent</h3>
-            <button type="button" className="rounded-md px-2 py-1 text-lg leading-none text-[#675f78] hover:bg-[#ece7ff]" onClick={() => setIsAgentOpen(false)} aria-label="Close AI agent">×</button>
-          </div>
-          <p className="mt-1 text-sm text-[#675f78]">Ask a question and I&apos;ll search matching chunks from your database.</p>
-          <div className="mt-3 flex gap-2">
-            <Input
-              value={agentQuery}
-              onChange={(event) => setAgentQuery(event.target.value)}
-              placeholder="e.g. what did I write about architecture?"
-            />
-            <Button type="button" onClick={handleAgentAsk} disabled={agentLoading || !agentQuery.trim()}>
-              {agentLoading ? 'Searching...' : 'Ask'}
-            </Button>
-          </div>
-
-          {agentResponse && (
-            <div className="mt-3 space-y-3 overflow-y-auto rounded-xl bg-[#f8f6ff] p-3 text-sm text-[#2f2147]">
-              <p className="whitespace-pre-wrap">{agentResponse.answer}</p>
-              {agentResponse.citations.length > 0 && (
-                <ul className="space-y-2">
-                  {agentResponse.citations.map((citation, index) => (
-                    <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-2">
-                      <p className="text-xs font-medium text-[#5d5470]">
-                        {citation.source} / {citation.pageId} · {citation.syncedAt} · chunk {citation.chunkIndex}
-                      </p>
-                      <p className="whitespace-pre-wrap">{citation.snippet}</p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
-      )}
     </div>
   )
 }
