@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
+import { apiUrl } from "@/lib/config";
 
 export default function NotionCallback() {
   const [params] = useSearchParams();
@@ -38,7 +39,7 @@ export default function NotionCallback() {
     //If a pageId was stored prior to redirect (optional), send it so server can kick off ingestion
     const optionalPageId = sessionStorage.getItem('notion_selected_pageId');
 
-    fetch("http://localhost:8080/api/oauth/notion/callback", {
+    fetch(apiUrl("/api/oauth/notion/callback"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
