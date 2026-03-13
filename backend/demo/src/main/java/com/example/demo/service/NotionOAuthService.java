@@ -10,6 +10,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -59,6 +61,18 @@ public class NotionOAuthService {
                     formatJson("Notion token exchange failed", e.getResponseBodyAsString()),
                     e
             );
+        } catch (HttpServerErrorException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    formatJson("Notion token exchange failed due to upstream error", e.getResponseBodyAsString()),
+                    e
+            );
+        } catch (RestClientException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    "Notion token exchange failed due to connectivity issue",
+                    e
+            );
         }
 
         String prettyResponse = formatJson("Notion token response", response.getBody());
@@ -75,11 +89,18 @@ public class NotionOAuthService {
             );
         }
 
-    log.info("NOTION ACCESS TOKEN = {}", res.get("access_token"));
+        log.info("NOTION ACCESS TOKEN = {}", res.get("access_token"));
 
-    String accessToken = (String) res.get("access_token");
-    String workspaceId = (String) res.get("workspace_id");
-    String botId = (String) res.get("bot_id");
+        String accessToken = (String) res.get("access_token");
+        String workspaceId = (String) res.get("workspace_id");
+        String botId = (String) res.get("bot_id");
+
+        if (accessToken == null || accessToken.isBlank() || workspaceId == null || workspaceId.isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    formatJson("Notion token response missing required fields", response.getBody())
+            );
+        }
 
         // Upsert by workspaceId to avoid duplicate records if callback is received twice.
         // Handle the case where duplicates already exist in DB by keeping the latest and removing others.

@@ -91,16 +91,18 @@ POSTGRES_USER=secondbrain
 POSTGRES_PASSWORD=secondbrain
 
 # Frontend
-VITE_API_BASE_URL=http://localhost:8080
+VITE_API_BASE_URL=https://your-backend.onrender.com  # or omit to use current browser origin
 VITE_NOTION_CLIENT_ID=<notion_client_id>
-VITE_NOTION_REDIRECT_URI=http://localhost/auth/notion/callback
+VITE_NOTION_REDIRECT_URI=https://your-frontend.onrender.com/auth/notion/callback
 
 # Backend OAuth + CORS
-APP_CORS_ALLOWED_ORIGINS=http://localhost
-APP_FRONTEND_GOOGLE_CALLBACK_URL=http://localhost/auth/google/callback
+# IMPORTANT: set this to your FRONTEND origin(s), not the backend API URL.
+# Example (Render): APP_CORS_ALLOWED_ORIGINS=https://your-frontend.onrender.com
+APP_CORS_ALLOWED_ORIGINS=https://your-frontend.onrender.com
+APP_FRONTEND_GOOGLE_CALLBACK_URL=https://your-frontend.onrender.com/auth/google/callback
 GOOGLE_CLIENT_ID=<google_client_id>
 GOOGLE_CLIENT_SECRET=<google_client_secret>
-GOOGLE_REDIRECT_URI=http://localhost/login/oauth2/code/google
+GOOGLE_REDIRECT_URI=https://your-backend.onrender.com/login/oauth2/code/google
 
 # AIML
 OPENAI_API_KEY=<openai_key>
