@@ -3,9 +3,7 @@ package com.example.demo.entity;
 import jakarta.persistence.*;
 
 @Entity
-@Table(
-  uniqueConstraints = @UniqueConstraint(columnNames = "workspaceId")
-)
+@Table(name = "notion_token")
 public class NotionToken {
 
     @Id
@@ -14,6 +12,9 @@ public class NotionToken {
 
     private String accessToken;
 
+    @Column(name = "app_user_id")
+    private Long appUserId;
+
     private String workspaceId;
 
     private String botId;
@@ -21,14 +22,16 @@ public class NotionToken {
     protected NotionToken() {
     }
 
-    public NotionToken(Long id, String accessToken, String workspaceId, String botId) {
+    public NotionToken(Long id, String accessToken, Long appUserId, String workspaceId, String botId) {
         this.id = id;
         this.accessToken = accessToken;
+        this.appUserId = appUserId;
         this.workspaceId = workspaceId;
         this.botId = botId;
     }
-    public NotionToken(String accessToken, String workspaceId, String botId) {
+    public NotionToken(String accessToken, Long appUserId, String workspaceId, String botId) {
         this.accessToken = accessToken;
+        this.appUserId = appUserId;
         this.workspaceId = workspaceId;
         this.botId = botId;
     }
@@ -48,6 +51,14 @@ public class NotionToken {
 
     public void setAccessToken(String accessToken) {
         this.accessToken = accessToken;
+    }
+
+    public Long getAppUserId() {
+        return appUserId;
+    }
+
+    public void setAppUserId(Long appUserId) {
+        this.appUserId = appUserId;
     }
 
     public String getWorkspaceId() {

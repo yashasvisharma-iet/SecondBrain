@@ -1,8 +1,10 @@
 package com.example.demo.controller;
 
 import com.example.demo.dto.NoteContentDto;
+import com.example.demo.entity.AppUser;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.service.GoogleDocsIngestionService;
+import com.example.demo.service.auth.CurrentUserService;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -12,7 +14,12 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.annotation.RegisteredOAuth2AuthorizedClient;
 import org.springframework.security.oauth2.core.user.OAuth2User;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.ArrayList;
@@ -29,27 +36,38 @@ public class GoogleDocsIngestionController {
 
     private final GoogleDocsIngestionService ingestionService;
     private final NotionPageContentRepository pageRepository;
+    private final CurrentUserService currentUserService;
     private final RestTemplate restTemplate = new RestTemplate();
 
     public GoogleDocsIngestionController(GoogleDocsIngestionService ingestionService,
-                                         NotionPageContentRepository pageRepository) {
+                                         NotionPageContentRepository pageRepository,
+                                         CurrentUserService currentUserService) {
         this.ingestionService = ingestionService;
         this.pageRepository = pageRepository;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/ingest")
-    public ResponseEntity<String> ingestDoc(@RequestParam String docId,
-                                            @RequestParam String accessToken) {
-        if (docId.isBlank() || accessToken.isBlank()) {
-            return ResponseEntity.badRequest().body("docId and accessToken are required");
+    public ResponseEntity<String> ingestDoc(@AuthenticationPrincipal OAuth2User principal,
+                                            @RequestBody Map<String, String> body,
+                                            @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient) {
+        if (authorizedClient == null || authorizedClient.getAccessToken() == null) {
+            return ResponseEntity.status(401).body("Google account is not connected");
         }
 
-        ingestionService.ingestDoc(docId, accessToken);
+        String docId = body.get("docId");
+        if (docId == null || docId.isBlank()) {
+            return ResponseEntity.badRequest().body("docId is required");
+        }
+
+        AppUser user = currentUserService.requireUser(principal);
+        ingestionService.ingestDoc(user.getId(), docId, authorizedClient.getAccessToken().getTokenValue());
         return ResponseEntity.ok("Google Doc ingested successfully for docId=" + docId);
     }
 
     @PostMapping("/ingestRaw")
-    public ResponseEntity<String> ingestRaw(@RequestBody Map<String, String> body) {
+    public ResponseEntity<String> ingestRaw(@AuthenticationPrincipal OAuth2User principal,
+                                            @RequestBody Map<String, String> body) {
         String docId = body.get("docId");
         String content = body.get("content");
 
@@ -57,14 +75,17 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.badRequest().body("docId and content are required");
         }
 
-        ingestionService.ingestRawContent(docId, content);
+        AppUser user = currentUserService.requireUser(principal);
+        ingestionService.ingestRawContent(user.getId(), docId, content);
         return ResponseEntity.ok("Raw Google Doc content ingested for docId=" + docId);
     }
 
     @GetMapping("/doc/{docId}")
-    public ResponseEntity<NoteContentDto> getDocByDocId(@PathVariable String docId) {
+    public ResponseEntity<NoteContentDto> getDocByDocId(@AuthenticationPrincipal OAuth2User principal,
+                                                        @PathVariable String docId) {
+        AppUser user = currentUserService.requireUser(principal);
         String pageId = GOOGLE_DOC_PREFIX + docId;
-        return pageRepository.findByPageId(pageId)
+        return pageRepository.findByPageIdAndAppUserId(pageId, user.getId())
                 .map(page -> ResponseEntity.ok(new NoteContentDto(page.getPageId(), page.getContent())))
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
@@ -75,6 +96,8 @@ public class GoogleDocsIngestionController {
         if (principal == null || authorizedClient == null || authorizedClient.getAccessToken() == null) {
             return ResponseEntity.status(401).body("Google account is not connected");
         }
+
+        currentUserService.requireUser(principal);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(authorizedClient.getAccessToken().getTokenValue());
@@ -102,7 +125,8 @@ public class GoogleDocsIngestionController {
     }
 
     @PostMapping("/ingest-selected")
-    public ResponseEntity<?> ingestSelected(@RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient,
+    public ResponseEntity<?> ingestSelected(@AuthenticationPrincipal OAuth2User principal,
+                                            @RegisteredOAuth2AuthorizedClient("google") OAuth2AuthorizedClient authorizedClient,
                                             @RequestBody Map<String, List<String>> body) {
         if (authorizedClient == null || authorizedClient.getAccessToken() == null) {
             return ResponseEntity.status(401).body("Google account is not connected");
@@ -113,10 +137,11 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.badRequest().body("docIds are required");
         }
 
+        AppUser user = currentUserService.requireUser(principal);
         String accessToken = authorizedClient.getAccessToken().getTokenValue();
         for (String docId : docIds) {
             if (docId != null && !docId.isBlank()) {
-                ingestionService.ingestDoc(docId, accessToken);
+                ingestionService.ingestDoc(user.getId(), docId, accessToken);
             }
         }
 

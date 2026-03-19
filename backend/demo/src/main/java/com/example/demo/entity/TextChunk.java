@@ -24,6 +24,9 @@ public class TextChunk {
   @Column(name = "raw_note_id", nullable = false)
   private Long rawNoteId;
 
+  @Column(name = "app_user_id")
+  private Long appUserId;
+
   @Column(name = "chunk_index", nullable = false)
   private int chunkIndex;
 
@@ -54,6 +57,14 @@ public class TextChunk {
 
   public void setRawNoteId(Long rawNoteId) {
     this.rawNoteId = rawNoteId;
+  }
+
+  public Long getAppUserId() {
+    return appUserId;
+  }
+
+  public void setAppUserId(Long appUserId) {
+    this.appUserId = appUserId;
   }
 
   public int getChunkIndex() {
