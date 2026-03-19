@@ -31,7 +31,7 @@ const revealUp = {
   show: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.7, ease: "easeOut" },
+    transition: { duration: 0.7, ease: 'easeOut' as const },
   },
 };
 
@@ -134,7 +134,7 @@ const Splash = () => {
         >
           <motion.div
             animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+            transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' as const }}
             className="overflow-hidden rounded-[28px] bg-white shadow-[0_0_80px_12px_rgba(124,68,255,0.85)]"
             style={{ boxShadow: '0 0 80px 12px rgba(124,68,255,0.85), 0 0 0 4px #8b4dff' }}
           >
