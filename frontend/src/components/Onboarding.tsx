@@ -34,6 +34,13 @@ const NOTION_AUTH_URL = NOTION_CLIENT_ID
   ? `https://api.notion.com/v1/oauth/authorize?client_id=${encodeURIComponent(NOTION_CLIENT_ID)}&response_type=code&owner=user&redirect_uri=${encodeURIComponent(NOTION_REDIRECT_URI)}`
   : "";
 
+type CurrentUser = {
+  id: number;
+  email: string;
+  name: string;
+  avatarUrl?: string | null;
+};
+
 const Onboarding = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -63,6 +70,30 @@ const Onboarding = () => {
   const googleDocsConnected = sessionStorage.getItem("google_docs_connected") === "1";
   const [googleDocs, setGoogleDocs] = useState<Array<{ id: string; name: string; modifiedTime: string }>>([]);
   const [selectedGoogleDocIds, setSelectedGoogleDocIds] = useState<string[]>([]);
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+
+  useEffect(() => {
+    fetch(apiUrl("/api/me"), { credentials: "include" })
+      .then(async (res) => {
+        if (res.status === 401) {
+          setCurrentUser(null);
+          return;
+        }
+        if (!res.ok) {
+          throw new Error("Unable to fetch current user");
+        }
+        const user = (await res.json()) as CurrentUser;
+        setCurrentUser(user);
+      })
+      .catch(() => {
+        setCurrentUser(null);
+      })
+      .finally(() => {
+        setAuthChecked(true);
+      });
+  }, []);
 
   useEffect(() => {
     sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
@@ -140,6 +171,30 @@ const Onboarding = () => {
   };
 
   const handleBack = () => step > 1 && setStep(step - 1);
+
+  if (!authChecked) {
+    return <div className="min-h-screen flex items-center justify-center">Loading your account…</div>;
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen gradient-subtle flex items-center justify-center px-5">
+        <div className="w-full max-w-md glass-strong rounded-2xl p-8 shadow-lg border border-border text-center space-y-4">
+          <div className="w-16 h-16 mx-auto rounded-full gradient-primary flex items-center justify-center text-white text-2xl">🧠</div>
+          <h2 className="text-2xl font-semibold">Sign in before connecting apps</h2>
+          <p className="text-sm text-muted-foreground">
+            Second Brain now keeps each person’s graph private. Sign in with Google first so Notion and Google Docs connect to the correct account.
+          </p>
+          <Button className="w-full" onClick={() => { window.location.href = apiUrl("/oauth2/authorization/google"); }}>
+            Sign in with Google
+          </Button>
+          <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
+            Back to home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen gradient-subtle flex flex-col">

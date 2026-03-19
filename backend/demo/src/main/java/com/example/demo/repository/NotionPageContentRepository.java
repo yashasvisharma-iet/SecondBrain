@@ -6,10 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.util.List;
 import java.util.Optional;
 
-public interface NotionPageContentRepository
-        extends JpaRepository<NotionPageContent, Long> {
+public interface NotionPageContentRepository extends JpaRepository<NotionPageContent, Long> {
 
-    Optional<NotionPageContent> findByPageId(String pageId);
+    Optional<NotionPageContent> findByPageIdAndAppUserId(String pageId, Long appUserId);
 
-    List<NotionPageContent> findAllByOrderBySyncedAtDesc();
+    List<NotionPageContent> findAllByAppUserIdOrderBySyncedAtDesc(Long appUserId);
 }

@@ -4,10 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(
-    name = "notion_page_content",
-    uniqueConstraints = @UniqueConstraint(columnNames = "pageId")
-)
+@Table(name = "notion_page_content")
 public class NotionPageContent {
 
     @Id
@@ -17,6 +14,9 @@ public class NotionPageContent {
     @Column(nullable = false)
     private String pageId;
 
+    @Column(name = "app_user_id")
+    private Long appUserId;
+
     @Column(columnDefinition = "TEXT")
     private String content;
 
@@ -24,8 +24,9 @@ public class NotionPageContent {
 
     protected NotionPageContent() {}
 
-    public NotionPageContent(String pageId, String content) {
+    public NotionPageContent(String pageId, Long appUserId, String content) {
         this.pageId = pageId;
+        this.appUserId = appUserId;
         this.content = content;
         this.syncedAt = Instant.now();
     }
@@ -36,6 +37,14 @@ public class NotionPageContent {
 
     public String getPageId() {
         return pageId;
+    }
+
+    public Long getAppUserId() {
+        return appUserId;
+    }
+
+    public void setAppUserId(Long appUserId) {
+        this.appUserId = appUserId;
     }
 
     public String getContent() {
