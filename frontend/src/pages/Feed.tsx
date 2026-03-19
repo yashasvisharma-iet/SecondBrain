@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { GraphView } from '@/components/GraphView'
 import { type GraphData } from '@/components/GraphTypes'
@@ -80,6 +81,7 @@ const connections: AppConnection[] = [
 ]
 
 export function Feed() {
+  const navigate = useNavigate()
   const [notes, setNotes] = useState<Note[]>(initialNotes)
   const [selectedNoteId, setSelectedNoteId] = useState<string>(initialNotes[0].id)
   const [searchTerm, setSearchTerm] = useState('')
@@ -90,6 +92,7 @@ export function Feed() {
   const [agentResponse, setAgentResponse] = useState<AgentResponse | null>(null)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryText, setSummaryText] = useState('')
+  const [showOnboardingReminder, setShowOnboardingReminder] = useState(() => sessionStorage.getItem('onboarding_complete') !== '1')
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = useMemo(() => {
@@ -328,7 +331,33 @@ export function Feed() {
   }
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-[#d8d2e3]">
+    <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#d8d2e3]">
+      {showOnboardingReminder ? (
+        <div className="border-b border-[#d9ccff] bg-[#f5f0ff]">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-6 py-4 text-sm md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-semibold text-[#4b1e9b]">Finish setting up your workspace later</p>
+              <p className="text-[#5c5570]">Skip onboarding for now and reconnect your note sources whenever you're ready.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button type="button" onClick={() => navigate('/onboarding')}>
+                Resume onboarding
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  sessionStorage.setItem('onboarding_deferred', '1')
+                  setShowOnboardingReminder(false)
+                }}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="flex min-h-0 flex-1">
       <aside className="flex w-[320px] flex-col bg-[#2b0056] p-4 text-white">
         <Button
           type="button"
@@ -599,7 +628,7 @@ export function Feed() {
           </section>
         </div>
       </main>
-
+      </div>
     </div>
   )
 }

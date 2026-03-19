@@ -48,7 +48,6 @@ const Onboarding = () => {
   });
   const totalSteps = 3;
 
-  // New states
   const [selectedApps, setSelectedApps] = useState<string[]>(() => {
     const savedApps = sessionStorage.getItem("onboarding_selected_apps");
     if (!savedApps) return [];
@@ -60,8 +59,7 @@ const Onboarding = () => {
     }
   });
   const notionConnected =
-    callbackState?.notionConnected || sessionStorage.getItem("notion_connected") === "1"
-  ;
+    callbackState?.notionConnected || sessionStorage.getItem("notion_connected") === "1";
   const googleDocsConnected = sessionStorage.getItem("google_docs_connected") === "1";
   const [googleDocs, setGoogleDocs] = useState<Array<{ id: string; name: string; modifiedTime: string }>>([]);
   const [selectedGoogleDocIds, setSelectedGoogleDocIds] = useState<string[]>([]);
@@ -110,6 +108,11 @@ const Onboarding = () => {
     );
   };
 
+  const handleSkipForNow = () => {
+    sessionStorage.setItem("onboarding_deferred", "1");
+    navigate("/feed");
+  };
+
   const handleNext = () => {
     if (step === 1 && selectedApps.length === 0) {
       toast.error("Please select at least one app");
@@ -126,19 +129,30 @@ const Onboarding = () => {
       return;
     }
 
-    if (step < totalSteps) setStep(step + 1);
-    else navigate("/feed");
+    if (step < totalSteps) {
+      setStep(step + 1);
+      return;
+    }
+
+    sessionStorage.setItem("onboarding_complete", "1");
+    sessionStorage.removeItem("onboarding_deferred");
+    navigate("/feed");
   };
 
   const handleBack = () => step > 1 && setStep(step - 1);
 
   return (
     <div className="min-h-screen gradient-subtle flex flex-col">
-      {/* Progress */}
       <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex justify-between text-sm mb-2">
+        <div className="max-w-md mx-auto px-4 py-4 space-y-3">
+          <div className="flex items-center justify-between text-sm">
             <span className="font-medium">Workspace Setup</span>
+            <Button variant="ghost" className="h-auto px-0 text-sm text-muted-foreground hover:text-foreground" onClick={handleSkipForNow}>
+              Skip for now
+            </Button>
+          </div>
+          <div className="flex justify-between text-sm mb-2">
+            <span className="font-medium">Connect your tools</span>
             <span className="text-muted-foreground">
               Step {step} of {totalSteps}
             </span>
@@ -147,11 +161,9 @@ const Onboarding = () => {
         </div>
       </div>
 
-      {/* Main */}
       <div className="flex-1 flex items-center justify-center px-5 py-8">
         <div className="w-full max-w-md glass-strong rounded-2xl p-6 shadow-lg border border-border overflow-hidden">
           <AnimatePresence mode="wait">
-            {/* Step 1 — Apps */}
             {step === 1 && (
               <motion.div
                 key="step1"
@@ -180,6 +192,10 @@ const Onboarding = () => {
                   <li>Connect Google Docs (if selected).</li>
                 </ol>
 
+                <div className="rounded-xl border border-dashed border-border/80 bg-background/60 p-4 text-sm text-muted-foreground">
+                  You can skip setup now and finish connecting your apps later from the workspace.
+                </div>
+
                 <div className="flex flex-wrap gap-2 justify-center">
                   {NOTE_APPS.map((app) => (
                     <Badge
@@ -199,7 +215,6 @@ const Onboarding = () => {
               </motion.div>
             )}
 
-            {/* Step 2 — Notion */}
             {step === 2 && (
               <motion.div
                 key="step2"
@@ -234,18 +249,18 @@ const Onboarding = () => {
                       Notion Connected
                     </Badge>
                   ) : (
-                      <Button
-                        className="w-full"
-                        onClick={() => {
+                    <Button
+                      className="w-full"
+                      onClick={() => {
                         sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
                         sessionStorage.setItem("onboarding_step", "2");
-                          if (!NOTION_AUTH_URL) {
-                            toast.error("Missing Notion client configuration");
-                            return;
-                          }
-                          window.location.href = NOTION_AUTH_URL;
-                        }}
-                      >
+                        if (!NOTION_AUTH_URL) {
+                          toast.error("Missing Notion client configuration");
+                          return;
+                        }
+                        window.location.href = NOTION_AUTH_URL;
+                      }}
+                    >
                       Connect Notion
                     </Button>
                   )}
@@ -257,7 +272,6 @@ const Onboarding = () => {
               </motion.div>
             )}
 
-            {/* Step 3 — Google Docs */}
             {step === 3 && (
               <motion.div
                 key="step3"
@@ -363,7 +377,6 @@ const Onboarding = () => {
             )}
           </AnimatePresence>
 
-          {/* Navigation */}
           <div className="flex items-center justify-between mt-8 pt-6 border-t border-border">
             <Button
               variant="ghost"
