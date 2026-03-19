@@ -30,16 +30,16 @@ public class GoogleDocsIngestionService {
         this.chunkingService = chunkingService;
     }
 
-    public void ingestDoc(String docId, String accessToken) {
+    public void ingestDoc(Long appUserId, String docId, String accessToken) {
         String pageId = toGoogleDocPageId(docId);
         JsonNode document = fetchDocument(docId, accessToken);
         String text = extractPlainText(document);
-        upsertContentAndChunk(pageId, text);
+        upsertContentAndChunk(appUserId, pageId, text);
     }
 
-    public void ingestRawContent(String docId, String rawContent) {
+    public void ingestRawContent(Long appUserId, String docId, String rawContent) {
         String pageId = toGoogleDocPageId(docId);
-        upsertContentAndChunk(pageId, rawContent);
+        upsertContentAndChunk(appUserId, pageId, rawContent);
     }
 
     private JsonNode fetchDocument(String docId, String accessToken) {
@@ -95,11 +95,12 @@ public class GoogleDocsIngestionService {
         }
     }
 
-    private void upsertContentAndChunk(String pageId, String content) {
+    private void upsertContentAndChunk(Long appUserId, String pageId, String content) {
         NotionPageContent pageContent = contentRepository
-                .findByPageId(pageId)
-                .orElse(new NotionPageContent(pageId, content));
+                .findByPageIdAndAppUserId(pageId, appUserId)
+                .orElse(new NotionPageContent(pageId, appUserId, content));
 
+        pageContent.setAppUserId(appUserId);
         pageContent.setContent(content);
         pageContent.setSyncedAt(Instant.now());
 
@@ -107,8 +108,9 @@ public class GoogleDocsIngestionService {
         try {
             saved = contentRepository.save(pageContent);
         } catch (DataIntegrityViolationException dive) {
-            NotionPageContent existing = contentRepository.findByPageId(pageId)
+            NotionPageContent existing = contentRepository.findByPageIdAndAppUserId(pageId, appUserId)
                     .orElseThrow(() -> new RuntimeException("Failed to upsert Google Doc content after unique constraint", dive));
+            existing.setAppUserId(appUserId);
             existing.setContent(content);
             existing.setSyncedAt(Instant.now());
             saved = contentRepository.save(existing);

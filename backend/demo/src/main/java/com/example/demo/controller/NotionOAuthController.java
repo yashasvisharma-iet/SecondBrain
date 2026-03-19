@@ -1,9 +1,15 @@
 package com.example.demo.controller;
 
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-
+import com.example.demo.entity.AppUser;
 import com.example.demo.service.NotionOAuthService;
+import com.example.demo.service.auth.CurrentUserService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
@@ -13,14 +19,19 @@ public class NotionOAuthController {
 
     private final NotionOAuthService notionOAuthService;
     private final com.example.demo.service.NotionIngestionService ingestionService;
+    private final CurrentUserService currentUserService;
 
-    public NotionOAuthController(NotionOAuthService notionOAuthService, com.example.demo.service.NotionIngestionService ingestionService) {
+    public NotionOAuthController(NotionOAuthService notionOAuthService,
+                                 com.example.demo.service.NotionIngestionService ingestionService,
+                                 CurrentUserService currentUserService) {
         this.notionOAuthService = notionOAuthService;
         this.ingestionService = ingestionService;
+        this.currentUserService = currentUserService;
     }
 
     @PostMapping("/callback")
-    public ResponseEntity<Void> callback(@RequestBody Map<String, String> body) {
+    public ResponseEntity<Void> callback(@AuthenticationPrincipal OAuth2User principal,
+                                         @RequestBody Map<String, String> body) {
 
         String code = body.get("code");
 
@@ -28,27 +39,21 @@ public class NotionOAuthController {
             return ResponseEntity.badRequest().build();
         }
 
-        String workspaceId = notionOAuthService.exchangeCode(code);
+        AppUser appUser = currentUserService.requireUser(principal);
+        String workspaceId = notionOAuthService.exchangeCode(code, appUser);
 
-        // optional pageId in body: if provided, kick off ingestion immediately
         String pageId = body.get("pageId");
         if (pageId != null && !pageId.isBlank()) {
-            System.out.println("NotionOAuthController: received pageId in callback, triggering ingestion for pageId=" + pageId + " workspaceId=" + workspaceId);
             try {
-                ingestionService.ingestPage(workspaceId, pageId);
-              } catch (Exception e) {
-                
+                ingestionService.ingestPage(appUser, workspaceId, pageId);
+            } catch (Exception e) {
                 System.err.println("Ingestion after OAuth failed: " + e.getMessage());
-                e.printStackTrace(System.err);
             }
         } else {
-            System.out.println("NotionOAuthController: no pageId provided in OAuth callback; ingesting recent pages instead.");
             try {
-                // ingest a few recent pages from the workspace so the user has some content indexed
-                ingestionService.ingestRecentPages(workspaceId, 5);
+                ingestionService.ingestRecentPages(appUser, workspaceId, 5);
             } catch (Exception e) {
                 System.err.println("Ingestion of recent pages after OAuth failed: " + e.getMessage());
-                e.printStackTrace(System.err);
             }
         }
 
