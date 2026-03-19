@@ -72,6 +72,7 @@ public class PineconeVectorStoreService {
         Map<String, Object> metadata = new HashMap<>();
         metadata.put("chunkId", chunk.getId());
         metadata.put("rawNoteId", chunk.getRawNoteId());
+        metadata.put("appUserId", chunk.getAppUserId());
         metadata.put("chunkIndex", chunk.getChunkIndex());
         metadata.put("content", chunk.getContent());
 
@@ -148,7 +149,7 @@ public class PineconeVectorStoreService {
         return List.copyOf(deduplicated.values());
     }
 
-    public List<RetrievedChunkMatch> querySimilarChunks(List<Double> queryEmbedding, int topK, double minScore) {
+    public List<RetrievedChunkMatch> querySimilarChunks(List<Double> queryEmbedding, int topK, double minScore, Long appUserId) {
         if (queryEmbedding == null || queryEmbedding.isEmpty() || !isConfigured()) {
             return List.of();
         }
@@ -157,12 +158,14 @@ public class PineconeVectorStoreService {
             throw new IllegalArgumentException("Embedding dimension mismatch. Expected " + dimensions + " got " + queryEmbedding.size());
         }
 
-        Map<String, Object> body = Map.of(
-                "namespace", namespace,
-                "vector", queryEmbedding,
-                "topK", topK,
-                "includeMetadata", true
-        );
+        Map<String, Object> body = new HashMap<>();
+        body.put("namespace", namespace);
+        body.put("vector", queryEmbedding);
+        body.put("topK", topK);
+        body.put("includeMetadata", true);
+        if (appUserId != null) {
+            body.put("filter", Map.of("appUserId", Map.of("$eq", appUserId)));
+        }
 
         QueryResponse response = post("/query", body, QueryResponse.class);
         if (response == null || response.matches == null) {
@@ -245,6 +248,7 @@ public class PineconeVectorStoreService {
 
     private RetrievedChunkMatch toRetrievedChunkMatch(QueryMatch match) {
         Long rawNoteId = toLong(match.metadata.get("rawNoteId"));
+        Long appUserId = toLong(match.metadata.get("appUserId"));
         Integer chunkIndex = toInteger(match.metadata.get("chunkIndex"));
         String content = toStringValue(match.metadata.get("content"));
         Long chunkId = toLong(match.metadata.get("chunkId"));
@@ -253,7 +257,7 @@ public class PineconeVectorStoreService {
             return null;
         }
 
-        return new RetrievedChunkMatch(rawNoteId, chunkIndex, content, chunkId, match.score);
+        return new RetrievedChunkMatch(rawNoteId, appUserId, chunkIndex, content, chunkId, match.score);
     }
 
     private Long toLong(Object value) {
@@ -292,6 +296,6 @@ public class PineconeVectorStoreService {
         return text.isEmpty() ? null : text;
     }
 
-    public record RetrievedChunkMatch(Long rawNoteId, Integer chunkIndex, String content, Long chunkId, Double score) {
+    public record RetrievedChunkMatch(Long rawNoteId, Long appUserId, Integer chunkIndex, String content, Long chunkId, Double score) {
     }
 }

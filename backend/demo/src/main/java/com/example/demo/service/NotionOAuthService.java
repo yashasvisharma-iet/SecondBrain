@@ -1,13 +1,21 @@
 package com.example.demo.service;
 
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import com.example.demo.entity.AppUser;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.http.*;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
@@ -18,9 +26,6 @@ import org.springframework.web.server.ResponseStatusException;
 import com.example.demo.config.NotionConfig;
 import com.example.demo.entity.NotionToken;
 import com.example.demo.repository.NotionTokenRepository;
-import java.util.List;
-import java.util.Comparator;
-import java.util.stream.Collectors;
 
 @Service
 public class NotionOAuthService {
@@ -37,7 +42,7 @@ public class NotionOAuthService {
         this.tokenRepository = tokenRepository;
     }
 
-    public String exchangeCode(String code) {
+    public String exchangeCode(String code, AppUser appUser) {
         RestTemplate restTemplate = new RestTemplate();
 
         HttpHeaders headers = new HttpHeaders();
@@ -89,8 +94,6 @@ public class NotionOAuthService {
             );
         }
 
-        log.info("NOTION ACCESS TOKEN = {}", res.get("access_token"));
-
         String accessToken = (String) res.get("access_token");
         String workspaceId = (String) res.get("workspace_id");
         String botId = (String) res.get("bot_id");
@@ -102,34 +105,32 @@ public class NotionOAuthService {
             );
         }
 
-        // Upsert by workspaceId to avoid duplicate records if callback is received twice.
-        // Handle the case where duplicates already exist in DB by keeping the latest and removing others.
-        List<NotionToken> existing = tokenRepository.findAllByWorkspaceId(workspaceId);
+        List<NotionToken> existing = tokenRepository.findAllByWorkspaceIdAndAppUserId(workspaceId, appUser.getId());
         if (existing == null || existing.isEmpty()) {
             NotionToken token = new NotionToken(
                     accessToken,
+                    appUser.getId(),
                     workspaceId,
                     botId
             );
             tokenRepository.save(token);
-            log.info("Saved new NotionToken for workspaceId={}", workspaceId);
+            log.info("Saved new NotionToken for workspaceId={} userId={}", workspaceId, appUser.getId());
         } else {
-            // pick the latest entry by id
             NotionToken latest = existing.stream()
                     .max(Comparator.comparing(NotionToken::getId))
                     .orElse(existing.get(0));
             latest.setAccessToken(accessToken);
+            latest.setAppUserId(appUser.getId());
             latest.setBotId(botId);
             tokenRepository.save(latest);
-            log.info("Updated existing NotionToken (id={}) for workspaceId={}", latest.getId(), workspaceId);
+            log.info("Updated existing NotionToken (id={}) for workspaceId={} userId={}", latest.getId(), workspaceId, appUser.getId());
 
-            // if there are older duplicates, delete them
             if (existing.size() > 1) {
                 List<NotionToken> toDelete = existing.stream()
                         .filter(t -> !t.getId().equals(latest.getId()))
                         .collect(Collectors.toList());
                 tokenRepository.deleteAll(toDelete);
-                log.warn("Found and removed {} duplicate NotionToken records for workspaceId={}", toDelete.size(), workspaceId);
+                log.warn("Found and removed {} duplicate NotionToken records for workspaceId={} userId={}", toDelete.size(), workspaceId, appUser.getId());
             }
         }
         return workspaceId;
