@@ -59,9 +59,9 @@ public class GraphService {
         this.queryMinScore = queryMinScore;
     }
 
-    public GraphDataDto getFeedGraph() {
-        List<NotionPageContent> pages = pageRepository.findAllByOrderBySyncedAtDesc();
-        List<TextChunk> chunks = chunkRepository.findAllByOrderByRawNoteIdAscChunkIndexAsc();
+    public GraphDataDto getFeedGraph(Long appUserId) {
+        List<NotionPageContent> pages = pageRepository.findAllByAppUserIdOrderBySyncedAtDesc(appUserId);
+        List<TextChunk> chunks = chunkRepository.findAllByAppUserIdOrderByRawNoteIdAscChunkIndexAsc(appUserId);
 
         Map<Long, NotionPageContent> pageById = pages.stream()
                 .collect(Collectors.toMap(NotionPageContent::getId, Function.identity()));
@@ -99,7 +99,7 @@ public class GraphService {
                 .toList();
     }
 
-    public AgentQueryResponse answerFromDatabase(String query) {
+    public AgentQueryResponse answerFromDatabase(Long appUserId, String query) {
         String normalizedQuery = query == null ? "" : query.trim();
         if (normalizedQuery.isEmpty()) {
             return new AgentQueryResponse("Please enter a question for me to search your knowledge base.", List.of());
@@ -114,13 +114,15 @@ public class GraphService {
         }
 
         List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorStoreService
-                .querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore);
+                .querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore, appUserId);
 
         if (!matches.isEmpty()) {
             List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
                     .sorted(Comparator.comparing(PineconeVectorStoreService.RetrievedChunkMatch::score).reversed())
                     .map(match -> toCitation(
-                            pageRepository.findById(match.rawNoteId()).orElse(null),
+                            pageRepository.findById(match.rawNoteId())
+                                    .filter(page -> appUserId.equals(page.getAppUserId()))
+                                    .orElse(null),
                             match.chunkIndex(),
                             abbreviate(match.content(), 360)))
                     .toList();
@@ -130,11 +132,13 @@ public class GraphService {
             return new AgentQueryResponse(answer, citations);
         }
 
-        List<TextChunk> lexicalMatches = chunkRepository.searchByContent(normalizedQuery, PageRequest.of(0, 5));
+        List<TextChunk> lexicalMatches = chunkRepository.searchByContent(appUserId, normalizedQuery, PageRequest.of(0, 5));
         if (!lexicalMatches.isEmpty()) {
             List<AgentQueryResponse.AgentCitationDto> citations = lexicalMatches.stream()
                     .map(chunk -> toCitation(
-                            pageRepository.findById(chunk.getRawNoteId()).orElse(null),
+                            pageRepository.findById(chunk.getRawNoteId())
+                                    .filter(page -> appUserId.equals(page.getAppUserId()))
+                                    .orElse(null),
                             chunk.getChunkIndex(),
                             abbreviate(chunk.getContent(), 360)))
                     .toList();
@@ -149,12 +153,12 @@ public class GraphService {
                 List.of());
     }
 
-    public String summarizePage(String pageId) {
+    public String summarizePage(Long appUserId, String pageId) {
         if (pageId == null || pageId.isBlank()) {
             return "Please select a note to summarize.";
         }
 
-        return pageRepository.findByPageId(pageId)
+        return pageRepository.findByPageIdAndAppUserId(pageId, appUserId)
                 .map(page -> aimlEmbeddingClient.summarizeText(page.getContent()))
                 .orElse("I couldn't find that note in the database yet.");
     }

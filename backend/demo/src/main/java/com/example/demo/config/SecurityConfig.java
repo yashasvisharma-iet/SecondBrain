@@ -2,13 +2,13 @@ package com.example.demo.config;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.security.core.AuthenticationException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -24,14 +24,22 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/google-docs/list", "/api/google-docs/ingest-selected").authenticated()
+                        .requestMatchers("/api/me", "/api/graph/**", "/api/notion/**", "/api/google-docs/**", "/api/oauth/notion/callback")
+                        .authenticated()
                         .anyRequest().permitAll()
                 )
                 .oauth2Login(oauth2 -> oauth2
                         .successHandler(this::handleGoogleAuthSuccess)
                         .failureHandler(this::handleGoogleAuthFailure)
                 )
-                .logout(Customizer.withDefaults());
+                .exceptionHandling(exceptions -> exceptions
+                        .defaultAuthenticationEntryPointFor(
+                                (request, response, exception) -> response.sendError(HttpServletResponse.SC_UNAUTHORIZED),
+                                new AntPathRequestMatcher("/api/**")
+                        )
+                )
+                .logout(logout -> logout.logoutSuccessHandler((request, response, authentication) -> response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
+                .httpBasic(Customizer.withDefaults());
 
         return http.build();
     }
@@ -44,7 +52,7 @@ public class SecurityConfig {
 
     private void handleGoogleAuthFailure(HttpServletRequest request,
                                          HttpServletResponse response,
-                                         AuthenticationException exception) throws java.io.IOException {
+                                         org.springframework.security.core.AuthenticationException exception) throws java.io.IOException {
         String encodedErrorMessage = URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
         response.sendRedirect(frontendGoogleCallbackUrl + "?error=" + encodedErrorMessage);
     }

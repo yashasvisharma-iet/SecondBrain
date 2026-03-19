@@ -52,6 +52,7 @@ public class ChunkingService {
         for (String content : chunks) {
             TextChunk chunk = new TextChunk();
             chunk.setRawNoteId(rawNoteId);
+            chunk.setAppUserId(page.getAppUserId());
             chunk.setChunkIndex(index++);
             chunk.setContent(content);
             savedChunks.add(chunkRepo.save(chunk));

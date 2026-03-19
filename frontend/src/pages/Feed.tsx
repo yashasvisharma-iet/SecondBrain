@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { GraphView } from '@/components/GraphView'
@@ -21,6 +21,15 @@ type GraphNodeMeta = {
   label: string
   type: 'note' | 'chunk' | 'topic'
   genre?: string | null
+}
+
+type CurrentUser = {
+  id: number
+  email: string
+  name: string
+  avatarUrl?: string | null
+  googleConnected: boolean
+  notionConnected: boolean
 }
 
 const initialNotes: Note[] = [
@@ -54,6 +63,8 @@ type AppConnection = {
   app: string
   description: string
   status: 'Connected' | 'Not connected'
+  actionLabel: string
+  actionHref?: string
 }
 
 type AgentCitation = {
@@ -73,13 +84,6 @@ type NoteSummaryResponse = {
   summary: string
 }
 
-const connections: AppConnection[] = [
-  { id: 'notion', app: 'Notion', description: 'Sync notes and pages', status: 'Connected' },
-  { id: 'google-docs', app: 'Google Docs', description: 'Ingest docs and meeting notes', status: 'Not connected' },
-  { id: 'drive', app: 'Google Drive', description: 'Import PDFs and files', status: 'Not connected' },
-  { id: 'slack', app: 'Slack', description: 'Capture team knowledge snippets', status: 'Not connected' },
-]
-
 export function Feed() {
   const navigate = useNavigate()
   const [notes, setNotes] = useState<Note[]>(initialNotes)
@@ -93,6 +97,8 @@ export function Feed() {
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [summaryText, setSummaryText] = useState('')
   const [showOnboardingReminder, setShowOnboardingReminder] = useState(() => sessionStorage.getItem('onboarding_complete') !== '1')
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
 
   const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? null
   const visibleNotes = useMemo(() => {
@@ -109,18 +115,74 @@ export function Feed() {
     return new Map(graphData.nodes.map((node) => [node.id, node as GraphNodeMeta]))
   }, [graphData.nodes])
 
-  const refreshGraph = async () => {
+  const connections: AppConnection[] = useMemo(
+    () => [
+      {
+        id: 'google-account',
+        app: 'Google account',
+        description: 'Primary sign-in for your private Second Brain workspace',
+        status: currentUser?.googleConnected ? 'Connected' : 'Not connected',
+        actionLabel: currentUser?.googleConnected ? 'Connected' : 'Sign in',
+        actionHref: !currentUser?.googleConnected ? apiUrl('/oauth2/authorization/google') : undefined,
+      },
+      {
+        id: 'notion',
+        app: 'Notion',
+        description: 'Sync notes and pages into your private graph',
+        status: currentUser?.notionConnected ? 'Connected' : 'Not connected',
+        actionLabel: currentUser?.notionConnected ? 'Reconnect' : 'Connect',
+        actionHref: '/onboarding',
+      },
+      {
+        id: 'google-docs',
+        app: 'Google Docs',
+        description: 'Ingest docs and meeting notes for this account',
+        status: currentUser?.googleConnected ? 'Connected' : 'Not connected',
+        actionLabel: currentUser?.googleConnected ? 'Manage' : 'Connect',
+        actionHref: '/onboarding',
+      },
+    ],
+    [currentUser],
+  )
+
+  const refreshGraph = useCallback(async () => {
     try {
       const response = await fetch(apiUrl('/api/graph/feed'), { credentials: 'include' })
+      if (response.status === 401) {
+        setCurrentUser(null)
+        return
+      }
       if (!response.ok) return
       const data = (await response.json()) as GraphData
       setGraphData(data)
     } catch (error) {
       console.error('Failed to fetch graph data', error)
     }
-  }
+  }, [])
 
-  const ingestNote = async (note: Pick<Note, 'id' | 'title' | 'content'>) => {
+  const fetchCurrentUser = useCallback(async () => {
+    try {
+      const response = await fetch(apiUrl('/api/me'), { credentials: 'include' })
+      if (response.status === 401) {
+        setCurrentUser(null)
+        setGraphData({ nodes: [], edges: [] })
+        return
+      }
+      if (!response.ok) {
+        throw new Error('Unable to load current user')
+      }
+      const data = (await response.json()) as CurrentUser
+      setCurrentUser(data)
+      await refreshGraph()
+    } catch (error) {
+      console.error('Failed to fetch current user', error)
+      setCurrentUser(null)
+    } finally {
+      setAuthChecked(true)
+    }
+  }, [refreshGraph])
+
+  const ingestNote = useCallback(async (note: Pick<Note, 'id' | 'title' | 'content'>) => {
     const contentToIngest = note.content.trim() || note.title.trim() || 'Untitled note'
     const response = await fetch(apiUrl('/api/notion/ingestRaw'), {
       method: 'POST',
@@ -133,25 +195,23 @@ export function Feed() {
       throw new Error(`Failed to ingest note ${note.id}`)
     }
 
-    sessionStorage.setItem(`ingested_note_${note.id}`, contentToIngest)
-  }
+    sessionStorage.setItem(`ingested_note_${currentUser?.id ?? 'guest'}_${note.id}`, contentToIngest)
+  }, [currentUser?.id])
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void refreshGraph()
-    }, 0)
-
-    return () => window.clearTimeout(timer)
-  }, [])
+    void fetchCurrentUser()
+  }, [fetchCurrentUser])
 
   useEffect(() => {
+    if (!currentUser) return
+
     const ingestNotes = async () => {
       try {
         const notesToIngest = notes.filter((note) => {
           const content = note.content.trim()
           if (!content) return false
 
-          const handledKey = `ingested_note_${note.id}`
+          const handledKey = `ingested_note_${currentUser.id}_${note.id}`
           const previousContent = sessionStorage.getItem(handledKey)
           return previousContent !== content
         })
@@ -178,7 +238,7 @@ export function Feed() {
     }
 
     void ingestNotes()
-  }, [notes])
+  }, [currentUser, ingestNote, notes, refreshGraph])
 
   useEffect(() => {
     setSummaryText('')
@@ -196,6 +256,8 @@ export function Feed() {
     setNotes((current) => [newNote, ...current])
     setSelectedNoteId(newNote.id)
     setActiveMode('notes')
+
+    if (!currentUser) return
 
     void ingestNote(newNote)
       .then(() => refreshGraph())
@@ -260,7 +322,6 @@ export function Feed() {
       setSelectedNoteId(importedNote.id)
       setActiveMode('brain-map')
       setIsDetailOpen(true)
-
     } catch (error) {
       console.error('Failed to open note from graph', error)
     }
@@ -330,6 +391,43 @@ export function Feed() {
     }
   }
 
+  const handleLogout = async () => {
+    await fetch(apiUrl('/logout'), {
+      method: 'POST',
+      credentials: 'include',
+    }).catch(() => undefined)
+    sessionStorage.removeItem('google_docs_connected')
+    setCurrentUser(null)
+    setGraphData({ nodes: [], edges: [] })
+    setAuthChecked(true)
+  }
+
+  if (!authChecked) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#d8d2e3] text-[#2f2147]">Loading your workspace…</div>
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#d8d2e3] p-6">
+        <div className="w-full max-w-xl rounded-3xl bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#efe8ff] text-3xl">🧠</div>
+          <h1 className="text-3xl font-semibold text-[#2f2147]">Sign in to open your private Second Brain</h1>
+          <p className="mt-3 text-sm leading-6 text-[#675f78]">
+            Each Google account gets its own profile, notes, graph, and AI retrieval context. Sign in first so the app can isolate your data.
+          </p>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
+            <Button type="button" onClick={() => { window.location.href = apiUrl('/oauth2/authorization/google') }}>
+              Sign in with Google
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => navigate('/')}>
+              Back to home
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#d8d2e3]">
       {showOnboardingReminder ? (
@@ -358,276 +456,301 @@ export function Feed() {
         </div>
       ) : null}
       <div className="flex min-h-0 flex-1">
-      <aside className="flex w-[320px] flex-col bg-[#2b0056] p-4 text-white">
-        <Button
-          type="button"
-          onClick={handleAddNote}
-          className="mb-6 h-14 w-full justify-start rounded-2xl bg-gradient-to-r from-[#9e70ff] to-[#7a58f2] px-5 text-3xl font-semibold hover:opacity-95"
-        >
-          + New Note
-        </Button>
-
-        <nav className="space-y-4 text-3xl">
-          {sidebarItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveMode(item.id)}
-              className="flex items-center gap-2 text-left text-white/95 transition-opacity hover:opacity-80"
-            >
-              <span>{item.icon}</span>
-              <span className={activeMode === item.id ? 'font-semibold text-white' : ''}>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      <main className="flex min-w-0 flex-1 flex-col p-5">
-        <div className="mb-4 flex items-center justify-between gap-4 rounded-xl bg-[#cdc6db] p-4">
-          <div className="flex w-full max-w-xl items-center gap-3">
-            <Input
-              placeholder="Search notes, chunks, ideas..."
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              className="h-12 border-0 bg-white text-base"
-            />
-            <Button type="button" variant="secondary" className="h-12 px-5">
-              Search
-            </Button>
-          </div>
-          <Badge variant="secondary" className="hidden rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#3d3550] md:inline-flex">
-            {sidebarItems.find((item) => item.id === activeMode)?.label}
-          </Badge>
-          <Button type="button" variant="secondary" className="h-12 rounded-xl bg-white px-5">
-            🧠 You
+        <aside className="flex w-[320px] flex-col bg-[#2b0056] p-4 text-white">
+          <Button
+            type="button"
+            onClick={handleAddNote}
+            className="mb-6 h-14 w-full justify-start rounded-2xl bg-gradient-to-r from-[#9e70ff] to-[#7a58f2] px-5 text-3xl font-semibold hover:opacity-95"
+          >
+            + New Note
           </Button>
-        </div>
 
-        <p className="mb-3 text-sm font-medium text-[#4f4565]">
-          {activeMode === 'brain-map' && 'Explore your graph and open any node to see complete note context.'}
-          {activeMode === 'notes' && 'Write and edit notes directly in Second Brain.'}
-          {activeMode === 'knowledge' && 'Review distilled concepts from your current note collection.'}
-          {activeMode === 'connections' && 'Inspect how ideas are linked across notes and chunks.'}
-          {activeMode === 'insights' && 'Get revision-oriented prompts to resume exactly where you left off.'}
-          {activeMode === 'ai-agent' && 'OpenAI-powered memory assistant that reasons over matched chunks and your selected note context.'}
-        </p>
+          <nav className="space-y-4 text-3xl">
+            {sidebarItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveMode(item.id)}
+                className="flex items-center gap-2 text-left text-white/95 transition-opacity hover:opacity-80"
+              >
+                <span>{item.icon}</span>
+                <span className={activeMode === item.id ? 'font-semibold text-white' : ''}>{item.label}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
-          <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-3">
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Local notes</h2>
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-              {visibleNotes.length > 0 ? (
-                visibleNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedNoteId(note.id)
-                      setIsDetailOpen(true)
-                    }}
-                    className={`w-full rounded-lg border p-3 text-left ${
-                      selectedNoteId === note.id ? 'border-[#7a58f2] bg-[#f1ecff]' : 'border-transparent bg-white hover:bg-[#f6f3ff]'
-                    }`}
-                  >
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <p className="font-medium text-[#2f2147]">{note.title}</p>
-                      {graphNodeById.get(note.id)?.genre && (
-                        <Badge variant="secondary" className="rounded-md bg-[#ece7ff] text-[10px] font-semibold text-[#4b3f8d]">
-                          {graphNodeById.get(note.id)?.genre}
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="line-clamp-2 text-sm text-[#675f78]">{note.content || 'Empty note'}</p>
-                  </button>
-                ))
-              ) : (
-                <p className="text-sm text-[#675f78]">No notes found.</p>
-              )}
-            </div>
-
-            <div className="mt-3 border-t pt-3">
+        <main className="flex min-w-0 flex-1 flex-col p-5">
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-xl bg-[#cdc6db] p-4">
+            <div className="flex w-full max-w-xl items-center gap-3">
               <Input
-                placeholder="Title"
-                value={selectedNote?.title ?? ''}
-                onChange={(event) => updateSelectedNote({ title: event.target.value })}
-                className="mb-2"
+                placeholder="Search notes, chunks, ideas..."
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                className="h-12 border-0 bg-white text-base"
               />
-              <Textarea
-                placeholder="Start writing..."
-                value={selectedNote?.content ?? ''}
-                onChange={(event) => updateSelectedNote({ content: event.target.value })}
-                className="h-24 resize-none"
-              />
-              <div className="mt-2 text-xs text-[#675f78]">
-                <Badge variant="secondary">{selectedNote ? `Created: ${selectedNote.createdAt}` : 'No note selected'}</Badge>
-              </div>
-            </div>
-          </section>
-
-          {activeMode === 'brain-map' && (
-            <section className="min-h-0 overflow-hidden rounded-2xl bg-[#d2cddb] p-3">
-              <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
-            </section>
-          )}
-
-          {activeMode === 'notes' && (
-            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
-              <h2 className="mb-3 text-lg font-semibold text-[#2f2147]">Focused note editor</h2>
-              <Input
-                placeholder="Untitled"
-                value={selectedNote?.title ?? ''}
-                onChange={(event) => updateSelectedNote({ title: event.target.value })}
-                className="mb-3"
-              />
-              <Textarea
-                placeholder="Start writing..."
-                value={selectedNote?.content ?? ''}
-                onChange={(event) => updateSelectedNote({ content: event.target.value })}
-                className="min-h-0 flex-1 resize-none"
-              />
-            </section>
-          )}
-
-          {activeMode === 'knowledge' && (
-            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
-              <h2 className="mb-2 text-lg font-semibold">Knowledge snapshot</h2>
-              <p className="mb-4 text-sm text-[#675f78]">Quick concept recap generated from your latest selected note.</p>
-              <p className="rounded-xl bg-[#f6f3ff] p-4 text-sm leading-6">
-                {selectedNote?.content
-                  ? `${selectedNote.content.slice(0, 350)}${selectedNote.content.length > 350 ? '...' : ''}`
-                  : 'Select a note to see extracted key ideas and condensed concepts here.'}
-              </p>
-            </section>
-          )}
-
-          {activeMode === 'connections' && (
-            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
-              <h2 className="mb-2 text-lg font-semibold">App connections</h2>
-              <p className="mb-4 text-sm text-[#675f78]">Manage source apps connected to your knowledge graph.</p>
-              <div className="space-y-3">
-                {connections.map((connection) => (
-                  <div key={connection.id} className="flex items-center justify-between rounded-xl border border-[#e6e1f2] bg-[#faf8ff] px-4 py-3">
-                    <div>
-                      <p className="font-medium">{connection.app}</p>
-                      <p className="text-xs text-[#675f78]">{connection.description}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant={connection.status === 'Connected' ? 'default' : 'secondary'}>{connection.status}</Badge>
-                      <Button type="button" size="sm" variant="secondary">
-                        {connection.status === 'Connected' ? 'Reconnect' : 'Connect'}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-4 rounded-xl bg-[#f6f3ff] p-4 text-sm">Connected apps can ingest fresh content into your graph automatically.</p>
-            </section>
-          )}
-
-          {activeMode === 'insights' && (
-            <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
-              <h2 className="mb-2 text-lg font-semibold">Revision insights</h2>
-              <div className="space-y-3 text-sm text-[#4d4560]">
-                <p className="rounded-xl bg-[#f6f3ff] p-3">Continue where you left off: <span className="font-semibold">{selectedNote?.title ?? 'No note selected'}</span></p>
-                <p className="rounded-xl bg-[#f6f3ff] p-3">Next action: Ask AI to quiz you on this note and suggest linked reading chunks.</p>
-                <p className="rounded-xl bg-[#f6f3ff] p-3">Memory hint: revisit notes with fewer than 2 graph links this week.</p>
-              </div>
-            </section>
-          )}
-
-          {activeMode === 'ai-agent' && (
-            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/90 p-5">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-semibold text-[#2f2147]">AI Agent (full chat)</h2>
-                  <p className="mt-1 text-sm text-[#675f78]">
-                    Hi 👋 Yes, you wrote something about this. I&apos;ll use OpenAI reasoning on top of chunk matching so you get context-aware answers.
-                  </p>
-                </div>
-              </div>
-              <div className="mt-4 flex gap-2">
-                <Input
-                  value={agentQuery}
-                  onChange={(event) => setAgentQuery(event.target.value)}
-                  placeholder="e.g. what did I write about architecture?"
-                />
-                <Button type="button" onClick={handleAgentAsk} disabled={agentLoading || !agentQuery.trim()}>
-                  {agentLoading ? 'Thinking...' : 'Ask AI'}
-                </Button>
-              </div>
-              <p className="mt-2 text-xs text-[#675f78]">
-                {selectedNote ? `Current note context: ${selectedNote.title}` : 'Tip: select a note for stronger contextual answers.'}
-              </p>
-
-              {agentResponse && (
-                <div className="mt-4 space-y-3 overflow-y-auto rounded-xl bg-[#f8f6ff] p-4 text-sm text-[#2f2147]">
-                  <p className="whitespace-pre-wrap">{agentResponse.answer}</p>
-                  {agentResponse.citations.length > 0 && (
-                    <ul className="space-y-2">
-                      {agentResponse.citations.map((citation, index) => (
-                        <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-3">
-                          <div className="mb-2 flex items-center justify-between gap-2">
-                            <p className="text-xs font-medium text-[#5d5470]">
-                              {citation.source} / {citation.pageId} · {citation.syncedAt} · chunk {citation.chunkIndex}
-                            </p>
-                            <Button type="button" size="sm" variant="secondary" onClick={() => openNoteFromAgent(citation.pageId)}>
-                              Open note link
-                            </Button>
-                          </div>
-                          <p className="whitespace-pre-wrap">{citation.snippet}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
-
-          <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Node detail</h2>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setIsDetailOpen((open) => !open)}>
-                {isDetailOpen ? 'Hide' : 'Show'}
+              <Button type="button" variant="secondary" className="h-12 px-5">
+                Search
               </Button>
             </div>
+            <Badge variant="secondary" className="hidden rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#3d3550] md:inline-flex">
+              {sidebarItems.find((item) => item.id === activeMode)?.label}
+            </Badge>
+            <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-2 text-left shadow-sm">
+              {currentUser.avatarUrl ? (
+                <img src={currentUser.avatarUrl} alt={currentUser.name} className="h-10 w-10 rounded-full object-cover" />
+              ) : (
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#efe8ff] font-semibold text-[#4b1e9b]">
+                  {currentUser.name.slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <div className="hidden min-w-0 sm:block">
+                <p className="truncate text-sm font-semibold text-[#2f2147]">{currentUser.name}</p>
+                <p className="truncate text-xs text-[#675f78]">{currentUser.email}</p>
+              </div>
+              <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
+                Log out
+              </Button>
+            </div>
+          </div>
 
-            {isDetailOpen && selectedNote ? (
-              <>
-                <p className="text-lg font-semibold text-[#2f2147]">{selectedNote.title || 'Untitled'}</p>
-                {graphNodeById.get(selectedNote.id)?.genre && (
-                  <Badge variant="secondary" className="mb-2 mt-1 w-fit rounded-md bg-[#ece7ff] text-xs font-semibold text-[#4b3f8d]">
-                    Genre: {graphNodeById.get(selectedNote.id)?.genre}
-                  </Badge>
+          <p className="mb-3 text-sm font-medium text-[#4f4565]">
+            {activeMode === 'brain-map' && 'Explore your graph and open any node to see complete note context.'}
+            {activeMode === 'notes' && 'Write and edit notes directly in Second Brain.'}
+            {activeMode === 'knowledge' && 'Review distilled concepts from your current note collection.'}
+            {activeMode === 'connections' && 'Inspect how ideas are linked across notes and chunks.'}
+            {activeMode === 'insights' && 'Get revision-oriented prompts to resume exactly where you left off.'}
+            {activeMode === 'ai-agent' && 'OpenAI-powered memory assistant that reasons over matched chunks and your selected note context.'}
+          </p>
+
+          <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 xl:grid-cols-[340px_minmax(0,1fr)_360px]">
+            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-3">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Local notes</h2>
+              <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
+                {visibleNotes.length > 0 ? (
+                  visibleNotes.map((note) => (
+                    <button
+                      key={note.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedNoteId(note.id)
+                        setIsDetailOpen(true)
+                      }}
+                      className={`w-full rounded-lg border p-3 text-left ${
+                        selectedNoteId === note.id ? 'border-[#7a58f2] bg-[#f1ecff]' : 'border-transparent bg-white hover:bg-[#f6f3ff]'
+                      }`}
+                    >
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <p className="font-medium text-[#2f2147]">{note.title}</p>
+                        {graphNodeById.get(note.id)?.genre && (
+                          <Badge variant="secondary" className="rounded-md bg-[#ece7ff] text-[10px] font-semibold text-[#4b3f8d]">
+                            {graphNodeById.get(note.id)?.genre}
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="line-clamp-2 text-sm text-[#675f78]">{note.content || 'Empty note'}</p>
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-sm text-[#675f78]">No notes found.</p>
                 )}
-                <p className="mb-3 text-xs text-[#675f78]">Source: {selectedNote.createdAt === 'Imported' ? 'Imported node' : 'Local note'}</p>
-                <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-[#f8f6ff] p-3 text-sm leading-6 text-[#2f2147]">
-                  {selectedNote.content || 'This note is empty. Add details to enrich your graph memory.'}
+              </div>
+
+              <div className="mt-3 border-t pt-3">
+                <Input
+                  placeholder="Title"
+                  value={selectedNote?.title ?? ''}
+                  onChange={(event) => updateSelectedNote({ title: event.target.value })}
+                  className="mb-2"
+                />
+                <Textarea
+                  placeholder="Start writing..."
+                  value={selectedNote?.content ?? ''}
+                  onChange={(event) => updateSelectedNote({ content: event.target.value })}
+                  className="h-24 resize-none"
+                />
+                <div className="mt-2 text-xs text-[#675f78]">
+                  <Badge variant="secondary">{selectedNote ? `Created: ${selectedNote.createdAt}` : 'No note selected'}</Badge>
                 </div>
-                <div className="mt-3 grid grid-cols-1 gap-2">
-                  <Button type="button" variant="secondary" className="justify-start" onClick={() => setActiveMode('notes')}>
-                    Continue where I left off
-                  </Button>
-                  <Button type="button" variant="secondary" className="justify-start" onClick={handleSummarizeNote} disabled={summaryLoading}>
-                    ✨ {summaryLoading ? 'Summarizing...' : 'Summarize with AI'}
-                  </Button>
-                  <Button type="button" variant="secondary" className="justify-start" onClick={handleAddNote}>
-                    Add linked note
+              </div>
+            </section>
+
+            {activeMode === 'brain-map' && (
+              <section className="min-h-0 overflow-hidden rounded-2xl bg-[#d2cddb] p-3">
+                <GraphView data={graphData} onNodeSelect={handleGraphSelect} />
+              </section>
+            )}
+
+            {activeMode === 'notes' && (
+              <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
+                <h2 className="mb-3 text-lg font-semibold text-[#2f2147]">Focused note editor</h2>
+                <Input
+                  placeholder="Untitled"
+                  value={selectedNote?.title ?? ''}
+                  onChange={(event) => updateSelectedNote({ title: event.target.value })}
+                  className="mb-3"
+                />
+                <Textarea
+                  placeholder="Start writing..."
+                  value={selectedNote?.content ?? ''}
+                  onChange={(event) => updateSelectedNote({ content: event.target.value })}
+                  className="min-h-0 flex-1 resize-none"
+                />
+              </section>
+            )}
+
+            {activeMode === 'knowledge' && (
+              <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+                <h2 className="mb-2 text-lg font-semibold">Knowledge snapshot</h2>
+                <p className="mb-4 text-sm text-[#675f78]">Quick concept recap generated from your latest selected note.</p>
+                <p className="rounded-xl bg-[#f6f3ff] p-4 text-sm leading-6">
+                  {selectedNote?.content
+                    ? `${selectedNote.content.slice(0, 350)}${selectedNote.content.length > 350 ? '...' : ''}`
+                    : 'Select a note to see extracted key ideas and condensed concepts here.'}
+                </p>
+              </section>
+            )}
+
+            {activeMode === 'connections' && (
+              <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+                <h2 className="mb-2 text-lg font-semibold">App connections</h2>
+                <p className="mb-4 text-sm text-[#675f78]">Manage source apps connected to your knowledge graph.</p>
+                <div className="space-y-3">
+                  {connections.map((connection) => (
+                    <div key={connection.id} className="flex items-center justify-between rounded-xl border border-[#e6e1f2] bg-[#faf8ff] px-4 py-3">
+                      <div>
+                        <p className="font-medium">{connection.app}</p>
+                        <p className="text-xs text-[#675f78]">{connection.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={connection.status === 'Connected' ? 'default' : 'secondary'}>{connection.status}</Badge>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            if (!connection.actionHref) return
+                            if (connection.actionHref.startsWith('http')) {
+                              window.location.href = connection.actionHref
+                              return
+                            }
+                            navigate(connection.actionHref)
+                          }}
+                        >
+                          {connection.actionLabel}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-4 rounded-xl bg-[#f6f3ff] p-4 text-sm">Connected apps can ingest fresh content into your graph automatically.</p>
+              </section>
+            )}
+
+            {activeMode === 'insights' && (
+              <section className="min-h-0 rounded-2xl border border-white/50 bg-white/80 p-5 text-[#2f2147]">
+                <h2 className="mb-2 text-lg font-semibold">Revision insights</h2>
+                <div className="space-y-3 text-sm text-[#4d4560]">
+                  <p className="rounded-xl bg-[#f6f3ff] p-3">Continue where you left off: <span className="font-semibold">{selectedNote?.title ?? 'No note selected'}</span></p>
+                  <p className="rounded-xl bg-[#f6f3ff] p-3">Next action: Ask AI to quiz you on this note and suggest linked reading chunks.</p>
+                  <p className="rounded-xl bg-[#f6f3ff] p-3">Memory hint: revisit notes with fewer than 2 graph links this week.</p>
+                </div>
+              </section>
+            )}
+
+            {activeMode === 'ai-agent' && (
+              <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/90 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-lg font-semibold text-[#2f2147]">AI Agent (full chat)</h2>
+                    <p className="mt-1 text-sm text-[#675f78]">
+                      Hi 👋 Yes, you wrote something about this. I&apos;ll use OpenAI reasoning on top of chunk matching so you get context-aware answers.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-4 flex gap-2">
+                  <Input
+                    value={agentQuery}
+                    onChange={(event) => setAgentQuery(event.target.value)}
+                    placeholder="e.g. what did I write about architecture?"
+                  />
+                  <Button type="button" onClick={handleAgentAsk} disabled={agentLoading || !agentQuery.trim()}>
+                    {agentLoading ? 'Thinking...' : 'Ask AI'}
                   </Button>
                 </div>
-                {summaryText && (
-                  <div className="mt-3 rounded-xl border border-[#e6e1f2] bg-[#faf8ff] p-3 text-sm text-[#2f2147]">
-                    <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#675f78]">AI Summary</p>
-                    <p className="whitespace-pre-wrap">{summaryText}</p>
+                <p className="mt-2 text-xs text-[#675f78]">
+                  {selectedNote ? `Current note context: ${selectedNote.title}` : 'Tip: select a note for stronger contextual answers.'}
+                </p>
+
+                {agentResponse && (
+                  <div className="mt-4 space-y-3 overflow-y-auto rounded-xl bg-[#f8f6ff] p-4 text-sm text-[#2f2147]">
+                    <p className="whitespace-pre-wrap">{agentResponse.answer}</p>
+                    {agentResponse.citations.length > 0 && (
+                      <ul className="space-y-2">
+                        {agentResponse.citations.map((citation, index) => (
+                          <li key={`${citation.pageId}-${citation.chunkIndex}-${index}`} className="rounded-lg bg-white p-3">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-[#5d5470]">
+                                {citation.source} / {citation.pageId} · {citation.syncedAt} · chunk {citation.chunkIndex}
+                              </p>
+                              <Button type="button" size="sm" variant="secondary" onClick={() => openNoteFromAgent(citation.pageId)}>
+                                Open note link
+                              </Button>
+                            </div>
+                            <p className="whitespace-pre-wrap">{citation.snippet}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
-              </>
-            ) : (
-              <p className="text-sm text-[#675f78]">Select a note or graph node to view full content and suggested next actions.</p>
+              </section>
             )}
-          </section>
-        </div>
-      </main>
+
+            <section className="flex min-h-0 flex-col rounded-2xl border border-white/50 bg-white/80 p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold uppercase tracking-wide text-[#3d3550]">Node detail</h2>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setIsDetailOpen((open) => !open)}>
+                  {isDetailOpen ? 'Hide' : 'Show'}
+                </Button>
+              </div>
+
+              {isDetailOpen && selectedNote ? (
+                <>
+                  <p className="text-lg font-semibold text-[#2f2147]">{selectedNote.title || 'Untitled'}</p>
+                  {graphNodeById.get(selectedNote.id)?.genre && (
+                    <Badge variant="secondary" className="mb-2 mt-1 w-fit rounded-md bg-[#ece7ff] text-xs font-semibold text-[#4b3f8d]">
+                      Genre: {graphNodeById.get(selectedNote.id)?.genre}
+                    </Badge>
+                  )}
+                  <p className="mb-3 text-xs text-[#675f78]">Source: {selectedNote.createdAt === 'Imported' ? 'Imported node' : 'Local note'}</p>
+                  <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border bg-[#f8f6ff] p-3 text-sm leading-6 text-[#2f2147]">
+                    {selectedNote.content || 'This note is empty. Add details to enrich your graph memory.'}
+                  </div>
+                  <div className="mt-3 grid grid-cols-1 gap-2">
+                    <Button type="button" variant="secondary" className="justify-start" onClick={() => setActiveMode('notes')}>
+                      Continue where I left off
+                    </Button>
+                    <Button type="button" variant="secondary" className="justify-start" onClick={handleSummarizeNote} disabled={summaryLoading}>
+                      ✨ {summaryLoading ? 'Summarizing...' : 'Summarize with AI'}
+                    </Button>
+                    <Button type="button" variant="secondary" className="justify-start" onClick={handleAddNote}>
+                      Add linked note
+                    </Button>
+                  </div>
+                  {summaryText && (
+                    <div className="mt-3 rounded-xl border border-[#e6e1f2] bg-[#faf8ff] p-3 text-sm text-[#2f2147]">
+                      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[#675f78]">AI Summary</p>
+                      <p className="whitespace-pre-wrap">{summaryText}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm text-[#675f78]">Select a note or graph node to view full content and suggested next actions.</p>
+              )}
+            </section>
+          </div>
+        </main>
       </div>
     </div>
   )
