@@ -9,5 +9,5 @@ const rawNotionRedirectUri = import.meta.env.VITE_NOTION_REDIRECT_URI?.trim() ??
 export const API_BASE_URL = trimTrailingSlash(rawApiBaseUrl);
 export const NOTION_CLIENT_ID = rawNotionClientId;
 export const NOTION_REDIRECT_URI = rawNotionRedirectUri;
-
+console.log("API BASE URL:", API_BASE_URL);
 export const apiUrl = (path: string) => `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;

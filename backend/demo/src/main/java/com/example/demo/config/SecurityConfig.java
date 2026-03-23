@@ -15,8 +15,7 @@ import java.nio.charset.StandardCharsets;
 
 @Configuration
 public class SecurityConfig {
-
-    @Value("${app.frontend-google-callback-url:http://localhost:5173/auth/google/callback}")
+ @Value("${app.frontend-google-callback-url:http://localhost:5173/auth/google/callback}")
     private String frontendGoogleCallbackUrl;
 
     @Bean
@@ -24,6 +23,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/me", "/api/graph/**", "/api/notion/**", "/api/google-docs/**", "/api/oauth/notion/callback")
                         .authenticated()
                         .anyRequest().permitAll()
@@ -47,6 +47,8 @@ public class SecurityConfig {
     private void handleGoogleAuthSuccess(HttpServletRequest request,
                                          HttpServletResponse response,
                                          org.springframework.security.core.Authentication authentication) throws java.io.IOException {
+        String userId = authentication.getName();
+        log.info("[AUTH SUCCESS] userId={} redirectingTo={}", userId, frontendGoogleCallbackUrl);
         response.sendRedirect(frontendGoogleCallbackUrl);
     }
 
@@ -54,6 +56,7 @@ public class SecurityConfig {
                                          HttpServletResponse response,
                                          org.springframework.security.core.AuthenticationException exception) throws java.io.IOException {
         String encodedErrorMessage = URLEncoder.encode(exception.getMessage(), StandardCharsets.UTF_8);
+        log.error("[AUTH FAILURE] error={} redirectingTo={}", encodedErrorMessage, frontendGoogleCallbackUrl);
         response.sendRedirect(frontendGoogleCallbackUrl + "?error=" + encodedErrorMessage);
     }
 }

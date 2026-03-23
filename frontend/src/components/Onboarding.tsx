@@ -33,7 +33,8 @@ const NOTE_APPS = [
 const NOTION_AUTH_URL = NOTION_CLIENT_ID
   ? `https://api.notion.com/v1/oauth/authorize?client_id=${encodeURIComponent(NOTION_CLIENT_ID)}&response_type=code&owner=user&redirect_uri=${encodeURIComponent(NOTION_REDIRECT_URI)}`
   : "";
-
+console.log("NOTION_REDIRECT_URI:", NOTION_REDIRECT_URI);
+console.log("AUTH URL:", NOTION_AUTH_URL);
 type CurrentUser = {
   id: number;
   email: string;
@@ -182,12 +183,10 @@ const Onboarding = () => {
         <div className="w-full max-w-md glass-strong rounded-2xl p-8 shadow-lg border border-border text-center space-y-4">
           <div className="w-16 h-16 mx-auto rounded-full gradient-primary flex items-center justify-center text-white text-2xl">🧠</div>
           <h2 className="text-2xl font-semibold">Sign in before connecting apps</h2>
-          <p className="text-sm text-muted-foreground">
-            Second Brain now keeps each person’s graph private. Sign in with Google first so Notion and Google Docs connect to the correct account.
-          </p>
+
           <Button className="w-full" onClick={() => { window.location.href = apiUrl("/oauth2/authorization/google"); }}>
             Sign in with Google
-          </Button>
+          </Button> 
           <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
             Back to home
           </Button>

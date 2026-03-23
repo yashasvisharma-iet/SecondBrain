@@ -109,8 +109,7 @@ const Splash = () => {
             transition={{ delay: 0.2, duration: 0.7 }}
             className="mx-auto mt-5 max-w-3xl text-lg text-black/60 select-none md:text-xl"
           >
-            Capture ideas, connect notes and explore your knowledge graph in one calm,
-            intelligent workspace.
+            Capture ideas, connect notes and have your own knowledge base.
           </motion.p>
 
           <motion.button
