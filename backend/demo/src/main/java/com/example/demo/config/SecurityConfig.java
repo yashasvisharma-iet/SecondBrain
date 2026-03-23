@@ -9,7 +9,8 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -17,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 public class SecurityConfig {
  @Value("${app.frontend-google-callback-url:http://localhost:5173/auth/google/callback}")
     private String frontendGoogleCallbackUrl;
-
+    private static final Logger log = LoggerFactory.getLogger(SecurityConfig.class);
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http

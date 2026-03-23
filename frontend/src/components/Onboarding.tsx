@@ -33,8 +33,7 @@ const NOTE_APPS = [
 const NOTION_AUTH_URL = NOTION_CLIENT_ID
   ? `https://api.notion.com/v1/oauth/authorize?client_id=${encodeURIComponent(NOTION_CLIENT_ID)}&response_type=code&owner=user&redirect_uri=${encodeURIComponent(NOTION_REDIRECT_URI)}`
   : "";
-console.log("NOTION_REDIRECT_URI:", NOTION_REDIRECT_URI);
-console.log("AUTH URL:", NOTION_AUTH_URL);
+
 type CurrentUser = {
   id: number;
   email: string;
