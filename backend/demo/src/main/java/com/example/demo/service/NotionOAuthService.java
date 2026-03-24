@@ -1,9 +1,6 @@
 package com.example.demo.service;
 
-import java.util.Comparator;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import com.example.demo.entity.AppUser;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -105,8 +102,10 @@ public class NotionOAuthService {
             );
         }
 
-        List<NotionToken> existing = tokenRepository.findAllByWorkspaceIdAndAppUserId(workspaceId, appUser.getId());
-        if (existing == null || existing.isEmpty()) {
+        NotionToken existing = tokenRepository
+                .findFirstByWorkspaceIdOrderByIdDesc(workspaceId)
+                .orElse(null);
+        if (existing == null) {
             NotionToken token = new NotionToken(
                     accessToken,
                     appUser.getId(),
@@ -116,22 +115,11 @@ public class NotionOAuthService {
             tokenRepository.save(token);
             log.info("Saved new NotionToken for workspaceId={} userId={}", workspaceId, appUser.getId());
         } else {
-            NotionToken latest = existing.stream()
-                    .max(Comparator.comparing(NotionToken::getId))
-                    .orElse(existing.get(0));
-            latest.setAccessToken(accessToken);
-            latest.setAppUserId(appUser.getId());
-            latest.setBotId(botId);
-            tokenRepository.save(latest);
-            log.info("Updated existing NotionToken (id={}) for workspaceId={} userId={}", latest.getId(), workspaceId, appUser.getId());
-
-            if (existing.size() > 1) {
-                List<NotionToken> toDelete = existing.stream()
-                        .filter(t -> !t.getId().equals(latest.getId()))
-                        .collect(Collectors.toList());
-                tokenRepository.deleteAll(toDelete);
-                log.warn("Found and removed {} duplicate NotionToken records for workspaceId={} userId={}", toDelete.size(), workspaceId, appUser.getId());
-            }
+            existing.setAccessToken(accessToken);
+            existing.setAppUserId(appUser.getId());
+            existing.setBotId(botId);
+            tokenRepository.save(existing);
+            log.info("Updated existing NotionToken (id={}) for workspaceId={} userId={}", existing.getId(), workspaceId, appUser.getId());
         }
         return workspaceId;
     }

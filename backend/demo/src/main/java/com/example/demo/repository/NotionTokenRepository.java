@@ -11,5 +11,7 @@ public interface NotionTokenRepository extends JpaRepository<NotionToken, Long> 
 
     Optional<NotionToken> findFirstByWorkspaceIdAndAppUserIdOrderByIdDesc(String workspaceId, Long appUserId);
 
+    Optional<NotionToken> findFirstByWorkspaceIdOrderByIdDesc(String workspaceId);
+
     boolean existsByAppUserId(Long appUserId);
 }

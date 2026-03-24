@@ -30,6 +30,18 @@ class NotionTokenRepositoryTest {
     }
 
     @Test
+    void findsLatestTokenForWorkspaceAcrossUsers() {
+        repository.save(new NotionToken("token-1", 3L, "workspace-1", "bot-1"));
+        NotionToken newest = repository.save(new NotionToken("token-2", 5L, "workspace-1", "bot-2"));
+
+        NotionToken found = repository.findFirstByWorkspaceIdOrderByIdDesc("workspace-1").orElseThrow();
+
+        assertThat(found.getId()).isEqualTo(newest.getId());
+        assertThat(found.getAppUserId()).isEqualTo(5L);
+        assertThat(found.getAccessToken()).isEqualTo("token-2");
+    }
+
+    @Test
     void reportsWhetherUserHasAnyConnectedNotionToken() {
         repository.saveAll(List.of(
                 new NotionToken("token-1", 10L, "workspace-1", "bot-1"),
