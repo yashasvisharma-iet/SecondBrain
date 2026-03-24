@@ -19,6 +19,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -50,7 +51,7 @@ class UserControllerTest {
         OAuth2User principal = principal();
         AppUser user = new AppUser("alice@example.com", "Alice", "https://avatar", "google", "sub-123");
         setId(user, 5L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(notionTokenRepository.existsByAppUserId(5L)).thenReturn(true);
 
         mockMvc.perform(get("/api/me")

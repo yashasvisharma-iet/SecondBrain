@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,7 +62,7 @@ class NotionIngestionControllerTest {
     void ingestsRawContentWhenPayloadIsValid() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(21L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
 
         mockMvc.perform(post("/api/notion/ingestRaw")
                         .with(authentication(new UsernamePasswordAuthenticationToken(principal, "n/a", principal.getAuthorities())))
@@ -88,7 +89,7 @@ class NotionIngestionControllerTest {
         AppUser user = appUser(21L);
         NotionPageContent page = new NotionPageContent("page-1", 21L, "hello");
         setId(page, 77L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(pageRepo.findByPageIdAndAppUserId("page-1", 21L)).thenReturn(Optional.of(page));
 
         mockMvc.perform(post("/api/notion/rechunkByPageId")
@@ -105,7 +106,7 @@ class NotionIngestionControllerTest {
         OAuth2User principal = principal();
         AppUser user = appUser(21L);
         NotionPageContent page = new NotionPageContent("page-1", 21L, "hello");
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(pageRepo.findByPageIdAndAppUserId("page-1", 21L)).thenReturn(Optional.of(page));
 
         mockMvc.perform(get("/api/notion/page/page-1")

@@ -1,5 +1,8 @@
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import previewImage from "@/assets/preview.png"; // change name accordingly
+
+
 import {
   ArrowUpRight,
   Check,
@@ -14,9 +17,7 @@ const navItems = ["Product", "FAQ", "Integrations", "About us"];
 const notePlatforms = [
   { icon: "📝", label: "Notion" },
   { icon: "📄", label: "Google Docs" },
-  { icon: "🍎", label: "Apple Notes" },
-  { icon: "📘", label: "OneNote" },
-  { icon: "🔷", label: "Obsidian" },
+
 ];
 
 const feedNodes = [
@@ -124,65 +125,39 @@ const Splash = () => {
           </motion.button>
         </section>
 
-        {/* PREVIEW PANEL */}
+        {/* PREVIEW IMAGE PANEL */}
         <motion.section
-          className="mt-12"
-          initial={{ opacity: 0, y: 90 }}
+          className="mt-12 flex justify-center"
+          initial={{ opacity: 0, y: 100 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7 }}
+          transition={{ duration: 0.8 }}
         >
           <motion.div
-            animate={{ y: [0, -8, 0] }}
-            transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut' as const }}
-            className="overflow-hidden rounded-[28px] bg-white shadow-[0_0_80px_12px_rgba(124,68,255,0.85)]"
-            style={{ boxShadow: '0 0 80px 12px rgba(124,68,255,0.85), 0 0 0 4px #8b4dff' }}
+            className="relative rounded-[28px] overflow-hidden"
+            style={{
+              perspective: 1200,
+            }}
           >
-            <div className="grid min-h-[520px] md:grid-cols-12">
-              <aside className="bg-[#2b0054] p-5 text-white md:col-span-3">
-                <button className="mb-5 w-full select-none rounded-2xl bg-[#8f63f8] px-4 py-3 text-left text-lg font-semibold">
-                  + New Note
-                </button>
-                <div className="space-y-2 select-none text-white/90">
-                  <p>🧠 Brain map</p>
-                  <p>📝 Notes</p>
-                  <p>📚 Knowledge</p>
-                  <p>🔗 Connections</p>
-                  <p>📈 Insights</p>
-                </div>
-              </aside>
-
-              <div className="bg-[#efe8fb] p-5 md:col-span-9">
-                <div className="mb-6 flex justify-between">
-                  <div className="flex items-center gap-2 select-none rounded-xl bg-white px-4 py-3 text-black/50">
-                    <Search className="h-4 w-4" />
-                    Search notes, chunks, ideas...
-                  </div>
-                  <div className="flex items-center gap-2 select-none rounded-xl bg-white px-4 py-3">
-                    <img src={logo} className="h-6 w-6 rounded-full" alt="Profile" />
-                    You <ChevronDown className="h-4 w-4" />
-                  </div>
-                </div>
-
-                <div className="relative min-h-[300px] rounded-2xl bg-[#f8f4ff] p-5">
-                  {feedNodes.map((node, i) => (
-                    <motion.div
-                      key={node.title}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      whileInView={{ scale: 1, opacity: 1 }}
-                      transition={{ delay: i * 0.08 }}
-                      className={`absolute ${node.x} ${node.y} select-none rounded-full px-4 py-2 text-sm text-white ${
-                        i % 2 === 0 ? "bg-[#3d82f3]" : "bg-[#16b38b]"
-                      }`}
-                    >
-                      {node.title}
-                    </motion.div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <motion.img
+              src={previewImage}
+              alt="App Preview"
+              className="w-full max-w-5xl rounded-[28px] shadow-[0_0_80px_12px_rgba(124,68,255,0.6)]"
+              
+              initial={{ rotateX: 25, rotateY: -15, scale: 0.95, opacity: 0.6 }}
+              animate={{
+                rotateX: [25, 15, 25],
+                rotateY: [-15, 10, -15],
+                scale: 1,
+                opacity: 1,
+              }}
+              transition={{
+                duration: 8,
+                repeat: Infinity,
+                ease: "easeInOut",
+              }}
+            />
           </motion.div>
         </motion.section>
-
         {/* INTEGRATIONS SECTION */}
         <motion.section
           variants={revealUp}
@@ -197,9 +172,9 @@ const Splash = () => {
                 Note Integrations
               </span>
 
-              <h2 className="mt-4 select-none text-5xl font-bold">
+              <h3 className="mt-4 select-none text-5xl font-bold">
                 Bring every notes platform into Second Brain
-              </h2>
+              </h3>
 
               <p className="mt-4 select-none text-lg text-black/60">
                 Connect your note-taking apps in one place. Everything remains searchable,

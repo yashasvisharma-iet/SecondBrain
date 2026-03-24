@@ -23,6 +23,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
@@ -55,7 +56,7 @@ class GraphControllerTest {
     void returnsFeedGraphForAuthenticatedUser() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(12L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(graphService.getFeedGraph(12L)).thenReturn(new GraphDataDto(
                 List.of(new GraphNodeDto("page-1", "Page 1", "note", "Life")),
                 List.of(new GraphEdgeDto("page-1", "page-2", 0.91))
@@ -72,7 +73,7 @@ class GraphControllerTest {
     void asksAgentUsingRequestBodyQuery() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(12L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(graphService.answerFromDatabase(12L, "Where are my notes?"))
                 .thenReturn(new AgentQueryResponse("Found them", List.of()));
 
@@ -88,7 +89,7 @@ class GraphControllerTest {
     void summarizesRequestedPage() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(12L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(graphService.summarizePage(12L, "page-1")).thenReturn("Short summary");
 
         mockMvc.perform(post("/api/graph/summarize")

@@ -36,6 +36,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
 
 @ExtendWith(MockitoExtension.class)
 class GoogleDocsIngestionControllerTest {
@@ -86,7 +87,7 @@ class GoogleDocsIngestionControllerTest {
     void ingestRawStoresContentForCurrentUser() {
         OAuth2User principal = principal();
         AppUser user = appUser(51L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
 
         var response = controller.ingestRaw(principal, Map.of("docId", "doc-1", "content", "hello"));
 
@@ -99,7 +100,7 @@ class GoogleDocsIngestionControllerTest {
         OAuth2User principal = principal();
         AppUser user = appUser(51L);
         NotionPageContent page = new NotionPageContent("gdoc:doc-1", 51L, "hello");
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(pageRepository.findByPageIdAndAppUserId("gdoc:doc-1", 51L)).thenReturn(Optional.of(page));
 
         mockMvc.perform(get("/api/google-docs/doc/doc-1")
@@ -122,7 +123,7 @@ class GoogleDocsIngestionControllerTest {
     void ingestSelectedProcessesNonBlankDocIds() {
         OAuth2User principal = principal();
         AppUser user = appUser(51L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
 
         var response = controller.ingestSelected(principal, authorizedClient, Map.of("docIds", List.of("doc-1", " ", "doc-2")));
 

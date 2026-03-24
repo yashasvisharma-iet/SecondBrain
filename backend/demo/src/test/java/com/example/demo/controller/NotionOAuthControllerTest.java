@@ -20,6 +20,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.util.List;
 import java.util.Map;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,7 +62,7 @@ class NotionOAuthControllerTest {
     void exchangesCodeAndIngestsSpecificPageWhenProvided() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(40L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(notionOAuthService.exchangeCode("code-123", user)).thenReturn("workspace-1");
 
         mockMvc.perform(post("/api/oauth/notion/callback")
@@ -77,7 +78,7 @@ class NotionOAuthControllerTest {
     void fallsBackToRecentPageIngestionWhenPageIdMissing() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(40L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(notionOAuthService.exchangeCode("code-123", user)).thenReturn("workspace-1");
 
         mockMvc.perform(post("/api/oauth/notion/callback")
@@ -93,7 +94,7 @@ class NotionOAuthControllerTest {
     void stillReturnsOkWhenPostOAuthIngestionFails() throws Exception {
         OAuth2User principal = principal();
         AppUser user = appUser(40L);
-        when(currentUserService.requireUser(principal)).thenReturn(user);
+        when(currentUserService.requireUser(any())).thenReturn(user);
         when(notionOAuthService.exchangeCode("code-123", user)).thenReturn("workspace-1");
         doThrow(new IllegalStateException("boom")).when(ingestionService).ingestPage(user, "workspace-1", "page-7");
 
