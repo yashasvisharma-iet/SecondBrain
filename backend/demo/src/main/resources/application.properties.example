@@ -22,3 +22,9 @@ semantic.top-k=8
 # spring.security.oauth2.client.registration.google.scope=openid,profile,email,https://www.googleapis.com/auth/documents.readonly,https://www.googleapis.com/auth/drive.metadata.readonly
 # spring.security.oauth2.client.registration.google.redirect-uri={baseUrl}/login/oauth2/code/{registrationId}
 # app.frontend-google-callback-url=http://localhost:5173/auth/google/callback
+
+# CORS + session cookies (required when frontend/backend run on different origins)
+# app.cors.allowed-origins=http://localhost:5173,https://YOUR_FRONTEND_DOMAIN
+# server.servlet.session.cookie.same-site=None
+# server.servlet.session.cookie.secure=true
+# server.forward-headers-strategy=framework

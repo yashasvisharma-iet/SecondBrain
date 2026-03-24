@@ -183,7 +183,14 @@ const Onboarding = () => {
           <div className="w-16 h-16 mx-auto rounded-full gradient-primary flex items-center justify-center text-white text-2xl">🧠</div>
           <h2 className="text-2xl font-semibold">Sign in before connecting apps</h2>
 
-          <Button className="w-full" onClick={() => { window.location.href = apiUrl("/oauth2/authorization/google"); }}>
+          <Button
+            className="w-full"
+            onClick={() => {
+              sessionStorage.setItem("google_oauth_intent", "signin");
+              sessionStorage.setItem("oauth_return_step", String(step));
+              window.location.href = apiUrl("/oauth2/authorization/google");
+            }}
+          >
             Sign in with Google
           </Button> 
           <Button variant="ghost" className="w-full" onClick={() => navigate("/")}>
@@ -414,6 +421,8 @@ const Onboarding = () => {
                       <Button
                         className="w-full"
                         onClick={() => {
+                          sessionStorage.setItem("google_oauth_intent", "google_docs");
+                          sessionStorage.setItem("oauth_return_step", "3");
                           window.location.href = apiUrl("/oauth2/authorization/google");
                         }}
                       >
