@@ -32,11 +32,11 @@ public class NotionOAuthController {
     }
 
     @PostMapping("/callback")
-    public ResponseEntity<Void> callback(@AuthenticationPrincipal OAuth2User principal,
-                                         @RequestBody Map<String, String> body) {
+    public ResponseEntity<Void> handleOAuthCallback(
+            @AuthenticationPrincipal OAuth2User principal,
+            @RequestBody Map<String, String> body) {
 
         String code = body.get("code");
-
         if (code == null) {
             return ResponseEntity.badRequest().build();
         }
@@ -44,21 +44,43 @@ public class NotionOAuthController {
         AppUser appUser = currentUserService.SaveUserToDB(principal);
         String workspaceId = notionOAuthService.exchangeAuthorizationCodeForNotionToken(code, appUser);
 
-        String pageId = body.get("pageId");
-        if (pageId != null && !pageId.isBlank()) {
-            try {
-                ingestionService.ingestPage(appUser, workspaceId, pageId);
-            } catch (Exception e) {
-                System.err.println("Ingestion after OAuth failed: " + e.getMessage());
-            }
-        } else {
-            try {
-                ingestionService.ingestRecentPages(appUser, workspaceId, 5);
-            } catch (Exception e) {
-                System.err.println("Ingestion of recent pages after OAuth failed: " + e.getMessage());
-            }
-        }
+        processIngestion(body, appUser, workspaceId);
 
         return ResponseEntity.ok().build();
     }
+    private void processIngestion(Map<String, String> body, AppUser user, String workspaceId) {
+        String pageId = body.get("pageId");
+
+        if (hasValidPageId(pageId)) {
+            ingestSinglePage(user, workspaceId, pageId);
+            return;
+        }
+
+        ingestRecentPages(user, workspaceId);
+    }
+
+    private boolean hasValidPageId(String pageId) {
+        return pageId != null && !pageId.isBlank();
+    }
+
+    private void ingestSinglePage(AppUser user, String workspaceId, String pageId) {
+        try {
+            ingestionService.ingestPage(user, workspaceId, pageId);
+        } catch (Exception e) {
+            logError("Ingestion after OAuth failed", e);
+        }
+    }
+
+    private void ingestRecentPages(AppUser user, String workspaceId) {
+        try {
+            ingestionService.ingestRecentPages(user, workspaceId, 5);
+        } catch (Exception e) {
+            logError("Ingestion of recent pages after OAuth failed", e);
+        }
+    }
+
+    private void logError(String message, Exception e) {
+        System.err.println(message + ": " + e.getMessage());
+    }
+
 }
