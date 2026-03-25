@@ -94,6 +94,7 @@ public class NotionIngestionService {
     private void upsertPage(Long appUserId, String pageId, String content) {
         NotionPageContent pageContent = contentRepository
                 .findByPageIdAndAppUserId(pageId, appUserId)
+                .or(() -> contentRepository.findByPageId(pageId))
                 .orElse(new NotionPageContent(pageId, appUserId, content));
 
         pageContent.setAppUserId(appUserId);
@@ -105,6 +106,7 @@ public class NotionIngestionService {
             saved = contentRepository.save(pageContent);
         } catch (DataIntegrityViolationException dive) {
             NotionPageContent existing = contentRepository.findByPageIdAndAppUserId(pageId, appUserId)
+                    .or(() -> contentRepository.findByPageId(pageId))
                     .orElseThrow(() -> new RuntimeException("Failed to upsert page content after unique constraint", dive));
             existing.setAppUserId(appUserId);
             existing.setContent(content);

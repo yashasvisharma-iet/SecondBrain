@@ -39,6 +39,7 @@ type CurrentUser = {
   email: string;
   name: string;
   avatarUrl?: string | null;
+  notionConnected: boolean;
 };
 
 const Onboarding = () => {
@@ -86,6 +87,12 @@ const Onboarding = () => {
         }
         const user = (await res.json()) as CurrentUser;
         setCurrentUser(user);
+        if (user.notionConnected) {
+          sessionStorage.setItem("notion_connected", "1");
+          sessionStorage.setItem("onboarding_complete", "1");
+          sessionStorage.removeItem("onboarding_deferred");
+          navigate("/feed", { replace: true });
+        }
       })
       .catch(() => {
         setCurrentUser(null);
@@ -93,7 +100,7 @@ const Onboarding = () => {
       .finally(() => {
         setAuthChecked(true);
       });
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     sessionStorage.setItem("onboarding_selected_apps", JSON.stringify(selectedApps));
