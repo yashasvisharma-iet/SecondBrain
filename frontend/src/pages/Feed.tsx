@@ -80,6 +80,35 @@ type AgentResponse = {
   citations: AgentCitation[]
 }
 
+const EMBEDDING_FAILURE_PATTERNS = [
+  'vector retrieval is unavailable',
+  "couldn't generate a query embedding",
+]
+
+const normalizeAgentResponse = (response: AgentResponse): AgentResponse => {
+  const rawAnswer = response.answer ?? ''
+  const lowered = rawAnswer.toLowerCase()
+  const hasEmbeddingFailureText = EMBEDDING_FAILURE_PATTERNS.some((pattern) => lowered.includes(pattern))
+
+  if (!hasEmbeddingFailureText) {
+    return response
+  }
+
+  if (response.citations.length > 0) {
+    return {
+      ...response,
+      answer:
+        "I couldn't use semantic search just now, but I still found keyword matches in your notes. Here are the best matches I found.",
+    }
+  }
+
+  return {
+    ...response,
+    answer:
+      "I couldn't find a confident match yet. Try adding more specific keywords, or sync more notes so I can answer with better context.",
+  }
+}
+
 type NoteSummaryResponse = {
   summary: string
 }
@@ -344,7 +373,7 @@ export function Feed() {
       }
 
       const data = (await response.json()) as AgentResponse
-      setAgentResponse(data)
+      setAgentResponse(normalizeAgentResponse(data))
     } catch (error) {
       console.error('Failed to query AI agent', error)
       setAgentResponse({ answer: 'Could not reach the agent endpoint. Make sure the backend is running.', citations: [] })

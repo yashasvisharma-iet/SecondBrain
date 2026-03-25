@@ -106,15 +106,10 @@ public class GraphService {
         }
 
         List<List<Double>> queryEmbeddings = aimlEmbeddingClient.buildEmbeddings(List.of(normalizedQuery));
-        if (queryEmbeddings.isEmpty()) {
-            return new AgentQueryResponse(
-                    "I couldn't generate a query embedding right now, so vector retrieval is unavailable.",
-                    List.of()
-            );
-        }
-
-        List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorStoreService
-                .querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore, appUserId);
+        boolean vectorAvailable = !queryEmbeddings.isEmpty();
+        List<PineconeVectorStoreService.RetrievedChunkMatch> matches = vectorAvailable
+                ? vectorStoreService.querySimilarChunks(queryEmbeddings.get(0), 5, queryMinScore, appUserId)
+                : List.of();
 
         if (!matches.isEmpty()) {
             List<AgentQueryResponse.AgentCitationDto> citations = matches.stream()
@@ -143,14 +138,21 @@ public class GraphService {
                             abbreviate(chunk.getContent(), 360)))
                     .toList();
 
-            String answer = "I didn't get strong vector matches, but I found " + lexicalMatches.size()
-                    + " keyword match(es) in your notes for: \"" + normalizedQuery + "\".";
+            String answer;
+            if (vectorAvailable) {
+                answer = "I didn't get strong vector matches, but I found " + lexicalMatches.size()
+                        + " keyword match(es) in your notes for: \"" + normalizedQuery + "\".";
+            } else {
+                answer = "I found " + lexicalMatches.size()
+                        + " keyword match(es) in your notes for: \"" + normalizedQuery + "\".";
+            }
             return new AgentQueryResponse(answer, citations);
         }
 
-        return new AgentQueryResponse(
-                "I couldn't find matching notes in either vector search or keyword search yet. Try different keywords or add more content.",
-                List.of());
+        String answer = vectorAvailable
+                ? "I couldn't find matching notes in either vector search or keyword search yet. Try different keywords or add more content."
+                : "I couldn't find a direct match in your notes yet. Try different keywords, or add more detail so I can respond with stronger context.";
+        return new AgentQueryResponse(answer, List.of());
     }
 
     public String summarizePage(Long appUserId, String pageId) {
