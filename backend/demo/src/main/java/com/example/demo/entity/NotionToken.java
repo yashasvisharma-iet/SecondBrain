@@ -19,7 +19,7 @@ public class NotionToken {
 
     private String botId;
 
-    protected NotionToken() {
+    public NotionToken() {
     }
 
     public NotionToken(Long id, String accessToken, Long appUserId, String workspaceId, String botId) {

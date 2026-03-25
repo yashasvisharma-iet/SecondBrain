@@ -39,89 +39,142 @@ public class NotionOAuthService {
         this.tokenRepository = tokenRepository;
     }
 
-    public String exchangeCode(String code, AppUser appUser) {
-        RestTemplate restTemplate = new RestTemplate();
+    public String exchangeAuthorizationCodeForNotionToken(String code, AppUser user) {
+        String responseBody = executeTokenRequest(code);
+        logResponse(responseBody);
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBasicAuth(notionConfig.getClientId(), notionConfig.getClientSecret());
-        headers.setContentType(MediaType.APPLICATION_JSON);
+        Map<String, Object> response = parseResponse(responseBody);
+        validateResponse(response);
 
-        Map<String, String> body = Map.of(
+        return saveOrUpdateToken(response, user);
+    }
+
+
+    private String executeTokenRequest(String code) {
+        try {
+            return createRestTemplate()
+                    .postForEntity(TOKEN_URL, createHttpRequest(code), String.class)
+                    .getBody();
+        } catch (HttpClientErrorException e) {
+            throw buildBadRequest(e);
+        } catch (HttpServerErrorException e) {
+            throw buildUpstreamError(e);
+        } catch (RestClientException e) {
+            throw buildConnectivityError(e);
+        }
+    }
+
+    private void logResponse(String responseBody) {
+        log.info(formatJson("Notion token response", responseBody));
+    }
+
+    private Map<String, Object> parseResponse(String body) {
+        try {
+            return MAPPER.readValue(body, new TypeReference<>() {});
+        } catch (Exception e) {
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to parse Notion response",
+                    e
+            );
+        }
+    }
+
+    private void validateResponse(Map<String, Object> response) {
+        if (isInvalid(response.get("access_token")) || isInvalid(response.get("workspace_id"))) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_GATEWAY,
+                    formatJson("Missing required fields", response.toString())
+            );
+        }
+    }
+
+    private String saveOrUpdateToken(Map<String, Object> res, AppUser user) {
+        String workspaceId = (String) res.get("workspace_id");
+        NotionToken token = findOrCreateToken(workspaceId);
+
+        updateToken(token, res, user);
+        tokenRepository.save(token);
+
+        logTokenAction(token, workspaceId, user);
+        return workspaceId;
+    }
+
+    // ================= LOW LEVEL =================
+
+    private RestTemplate createRestTemplate() {
+        return new RestTemplate();
+    }
+
+    private HttpEntity<Map<String, String>> createHttpRequest(String code) {
+        return new HttpEntity<>(createRequestBody(code), createHeaders());
+    }
+
+    private Map<String, String> createRequestBody(String code) {
+        return Map.of(
                 "grant_type", "authorization_code",
                 "code", code,
                 "redirect_uri", notionConfig.getRedirectUri()
         );
+    }
 
-        HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBasicAuth(notionConfig.getClientId(), notionConfig.getClientSecret());
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        return headers;
+    }
 
-        ResponseEntity<String> response;
-        try {
-            response = restTemplate.postForEntity(TOKEN_URL, request, String.class);
-        } catch (HttpClientErrorException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    formatJson("Notion token exchange failed", e.getResponseBodyAsString()),
-                    e
-            );
-        } catch (HttpServerErrorException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    formatJson("Notion token exchange failed due to upstream error", e.getResponseBodyAsString()),
-                    e
-            );
-        } catch (RestClientException e) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    "Notion token exchange failed due to connectivity issue",
-                    e
-            );
-        }
-
-        String prettyResponse = formatJson("Notion token response", response.getBody());
-        log.info(prettyResponse);
-
-        Map<String, Object> res;
-        try {
-            res = MAPPER.readValue(response.getBody(), new TypeReference<>() {});
-        } catch (Exception e) {
-            throw new ResponseStatusException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Failed to parse Notion token response",
-                    e
-            );
-        }
-
-        String accessToken = (String) res.get("access_token");
-        String workspaceId = (String) res.get("workspace_id");
-        String botId = (String) res.get("bot_id");
-
-        if (accessToken == null || accessToken.isBlank() || workspaceId == null || workspaceId.isBlank()) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_GATEWAY,
-                    formatJson("Notion token response missing required fields", response.getBody())
-            );
-        }
-
-        NotionToken existing = tokenRepository
+    private NotionToken findOrCreateToken(String workspaceId) {
+        return tokenRepository
                 .findFirstByWorkspaceIdOrderByIdDesc(workspaceId)
-                .orElse(null);
-        if (existing == null) {
-            NotionToken token = new NotionToken(
-                    accessToken,
-                    appUser.getId(),
-                    workspaceId,
-                    botId
-            );
-            tokenRepository.save(token);
-            log.info("Saved new NotionToken for workspaceId={} userId={}", workspaceId, appUser.getId());
+                .orElse(new NotionToken());
+    }
+
+    private void updateToken(NotionToken token, Map<String, Object> res, AppUser user) {
+        token.setAccessToken((String) res.get("access_token"));
+        token.setWorkspaceId((String) res.get("workspace_id"));
+        token.setBotId((String) res.get("bot_id"));
+        token.setAppUserId(user.getId());
+    }
+
+    private void logTokenAction(NotionToken token, String workspaceId, AppUser user) {
+        if (token.getId() == null) {
+            log.info("Saved new token for workspaceId={} userId={}", workspaceId, user.getId());
         } else {
-            existing.setAccessToken(accessToken);
-            existing.setAppUserId(appUser.getId());
-            existing.setBotId(botId);
-            tokenRepository.save(existing);
-            log.info("Updated existing NotionToken (id={}) for workspaceId={} userId={}", existing.getId(), workspaceId, appUser.getId());
+            log.info("Updated token id={} workspaceId={} userId={}",
+                    token.getId(), workspaceId, user.getId());
         }
-        return workspaceId;
+    }
+
+    private boolean isInvalid(Object value) {
+        return value == null || value.toString().isBlank();
+    }
+
+    //exceptions
+
+    private ResponseStatusException buildBadRequest(HttpClientErrorException e) {
+        return new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                formatJson("Token exchange failed", e.getResponseBodyAsString()),
+                e
+        );
+    }
+
+    private ResponseStatusException buildUpstreamError(HttpServerErrorException e) {
+        return new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                formatJson("Upstream error", e.getResponseBodyAsString()),
+                e
+        );
+    }
+
+    private ResponseStatusException buildConnectivityError(RestClientException e) {
+        return new ResponseStatusException(
+                HttpStatus.BAD_GATEWAY,
+                "Connectivity issue during token exchange",
+                e
+        );
     }
 
     private String formatJson(String prefix, String json) {

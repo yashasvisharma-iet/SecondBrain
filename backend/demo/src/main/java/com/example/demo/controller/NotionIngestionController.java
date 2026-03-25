@@ -6,7 +6,7 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.service.ChunkingService;
 import com.example.demo.service.NotionIngestionService;
-import com.example.demo.service.auth.CurrentUserService;
+import com.example.demo.service.auth.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -27,12 +27,12 @@ public class NotionIngestionController {
     private final NotionIngestionService ingestionService;
     private final ChunkingService chunkingService;
     private final NotionPageContentRepository pageRepo;
-    private final CurrentUserService currentUserService;
+    private final UserService currentUserService;
 
     public NotionIngestionController(NotionIngestionService ingestionService,
                                      ChunkingService chunkingService,
                                      NotionPageContentRepository pageRepo,
-                                     CurrentUserService currentUserService) {
+                                     UserService currentUserService) {
         this.ingestionService = ingestionService;
         this.chunkingService = chunkingService;
         this.pageRepo = pageRepo;
@@ -43,7 +43,7 @@ public class NotionIngestionController {
     public ResponseEntity<String> ingestPage(@AuthenticationPrincipal OAuth2User principal,
                                              @RequestParam String workspaceId,
                                              @RequestParam String pageId) {
-        AppUser user = currentUserService.requireUser(principal);
+        AppUser user = currentUserService.SaveUserToDB(principal);
         ingestionService.ingestPage(user, workspaceId, pageId);
         return ResponseEntity.ok("Page ingested successfully");
     }
@@ -58,7 +58,7 @@ public class NotionIngestionController {
             return ResponseEntity.badRequest().body("pageId and content are required");
         }
 
-        AppUser user = currentUserService.requireUser(principal);
+        AppUser user = currentUserService.SaveUserToDB(principal);
         ingestionService.ingestRawContent(user, pageId, content);
 
         return ResponseEntity.ok("Raw content ingested for pageId=" + pageId);
@@ -73,7 +73,7 @@ public class NotionIngestionController {
     @PostMapping("/rechunkByPageId")
     public ResponseEntity<String> rechunkByPageId(@AuthenticationPrincipal OAuth2User principal,
                                                   @RequestParam String pageId) {
-        AppUser user = currentUserService.requireUser(principal);
+        AppUser user = currentUserService.SaveUserToDB(principal);
         NotionPageContent page = pageRepo.findByPageIdAndAppUserId(pageId, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("pageId not found: " + pageId));
         chunkingService.chunkNote(page.getId());
@@ -83,7 +83,7 @@ public class NotionIngestionController {
     @GetMapping("/page/{pageId}")
     public ResponseEntity<NoteContentDto> getPageByPageId(@AuthenticationPrincipal OAuth2User principal,
                                                           @PathVariable String pageId) {
-        AppUser user = currentUserService.requireUser(principal);
+        AppUser user = currentUserService.SaveUserToDB(principal);
         return pageRepo
                 .findByPageIdAndAppUserId(pageId, user.getId())
                 .map(page -> ResponseEntity.ok(new NoteContentDto(page.getPageId(), page.getContent())))

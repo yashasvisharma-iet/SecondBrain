@@ -45,7 +45,7 @@ public class AppUser {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected AppUser() {
+    public AppUser() {
     }
 
     public AppUser(String email, String name, String avatarUrl, String authProvider, String providerUserId) {

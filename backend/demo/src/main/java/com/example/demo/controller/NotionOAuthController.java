@@ -2,7 +2,9 @@ package com.example.demo.controller;
 
 import com.example.demo.entity.AppUser;
 import com.example.demo.service.NotionOAuthService;
-import com.example.demo.service.auth.CurrentUserService;
+
+import com.example.demo.service.auth.UserService;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -19,11 +21,11 @@ public class NotionOAuthController {
 
     private final NotionOAuthService notionOAuthService;
     private final com.example.demo.service.NotionIngestionService ingestionService;
-    private final CurrentUserService currentUserService;
+    private final UserService currentUserService;
 
     public NotionOAuthController(NotionOAuthService notionOAuthService,
                                  com.example.demo.service.NotionIngestionService ingestionService,
-                                 CurrentUserService currentUserService) {
+                                 UserService currentUserService) {
         this.notionOAuthService = notionOAuthService;
         this.ingestionService = ingestionService;
         this.currentUserService = currentUserService;
@@ -39,8 +41,8 @@ public class NotionOAuthController {
             return ResponseEntity.badRequest().build();
         }
 
-        AppUser appUser = currentUserService.requireUser(principal);
-        String workspaceId = notionOAuthService.exchangeCode(code, appUser);
+        AppUser appUser = currentUserService.SaveUserToDB(principal);
+        String workspaceId = notionOAuthService.exchangeAuthorizationCodeForNotionToken(code, appUser);
 
         String pageId = body.get("pageId");
         if (pageId != null && !pageId.isBlank()) {
