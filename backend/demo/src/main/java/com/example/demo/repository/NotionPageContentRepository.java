@@ -9,6 +9,7 @@ import java.util.Optional;
 public interface NotionPageContentRepository extends JpaRepository<NotionPageContent, Long> {
 
     Optional<NotionPageContent> findByPageIdAndAppUserId(String pageId, Long appUserId);
+    Optional<NotionPageContent> findByPageId(String pageId);
 
     List<NotionPageContent> findAllByAppUserIdOrderBySyncedAtDesc(Long appUserId);
 }

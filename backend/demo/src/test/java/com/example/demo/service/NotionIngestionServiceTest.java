@@ -40,6 +40,7 @@ class NotionIngestionServiceTest {
         NotionPageContent saved = new NotionPageContent("page-1", 8L, "Hello world");
         setId(saved, 100L);
         when(contentRepository.findByPageIdAndAppUserId("page-1", 8L)).thenReturn(Optional.empty());
+        when(contentRepository.findByPageId("page-1")).thenReturn(Optional.empty());
         when(contentRepository.save(any(NotionPageContent.class))).thenReturn(saved);
 
         service.ingestRawContent(user, "page-1", "Hello world");
@@ -55,6 +56,7 @@ class NotionIngestionServiceTest {
         NotionPageContent existing = new NotionPageContent("page-1", 8L, "Old");
         setId(existing, 101L);
         when(contentRepository.findByPageIdAndAppUserId("page-1", 8L)).thenReturn(Optional.empty(), Optional.of(existing));
+        when(contentRepository.findByPageId("page-1")).thenReturn(Optional.empty());
         when(contentRepository.save(any(NotionPageContent.class)))
                 .thenThrow(new DataIntegrityViolationException("duplicate"))
                 .thenReturn(existing);
@@ -83,6 +85,7 @@ class NotionIngestionServiceTest {
         NotionPageContent saved = new NotionPageContent("page-2", 8L, "Hello world");
         setId(saved, 102L);
         when(contentRepository.findByPageIdAndAppUserId("page-2", 8L)).thenReturn(Optional.empty());
+        when(contentRepository.findByPageId("page-2")).thenReturn(Optional.empty());
         when(contentRepository.save(any(NotionPageContent.class))).thenReturn(saved);
         doThrow(new IllegalStateException("chunk failed")).when(chunkingService).chunkNote(102L);
 
@@ -90,6 +93,23 @@ class NotionIngestionServiceTest {
 
         verify(contentRepository).save(any(NotionPageContent.class));
         verify(chunkingService).chunkNote(102L);
+    }
+
+    @Test
+    void ingestRawContentReusesPageWhenItAlreadyExistsForAnotherUser() {
+        AppUser user = new AppUser("alice@example.com", "Alice", null, "google", "sub");
+        setId(user, 8L);
+        NotionPageContent existingForDifferentUser = new NotionPageContent("page-3", 9L, "Old");
+        setId(existingForDifferentUser, 103L);
+
+        when(contentRepository.findByPageIdAndAppUserId("page-3", 8L)).thenReturn(Optional.empty());
+        when(contentRepository.findByPageId("page-3")).thenReturn(Optional.of(existingForDifferentUser));
+        when(contentRepository.save(existingForDifferentUser)).thenReturn(existingForDifferentUser);
+
+        service.ingestRawContent(user, "page-3", "Updated");
+
+        verify(contentRepository).save(existingForDifferentUser);
+        verify(chunkingService).chunkNote(103L);
     }
 
     private void setId(Object target, Long id) {
