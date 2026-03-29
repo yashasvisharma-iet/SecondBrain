@@ -39,39 +39,80 @@ public class ChunkingService {
     @Transactional
     public void chunkNote(Long rawNoteId) {
         if (rawNoteId == null) return;
+
+        resetChunks(rawNoteId);
+
+        NotionPageContent page = findPage(rawNoteId);
+        List<TextChunk> chunks = createAndSaveChunks(page);
+
+        List<List<Double>> embeddings = generateEmbeddings(chunks);
+        upsertEmbeddings(rawNoteId, chunks, embeddings);
+
+        logSuccess(rawNoteId, chunks.size(), embeddings.size());
+    }
+
+    private void resetChunks(Long rawNoteId) {
         chunkRepo.deleteAllByRawNoteId(rawNoteId);
         vectorStoreService.deleteByRawNoteId(rawNoteId);
-
-        NotionPageContent page = pageRepo.findById(rawNoteId)
-                .orElseThrow(() -> new IllegalArgumentException("NotionPageContent not found: " + rawNoteId));
-
-        List<String> chunks = chunker.chunk(page.getContent());
-
-        int index = 0;
-        List<TextChunk> savedChunks = new java.util.ArrayList<>();
-        for (String content : chunks) {
-            TextChunk chunk = new TextChunk();
-            chunk.setRawNoteId(rawNoteId);
-            chunk.setAppUserId(page.getAppUserId());
-            chunk.setChunkIndex(index++);
-            chunk.setContent(content);
-            savedChunks.add(chunkRepo.save(chunk));
-        }
-
-        List<List<Double>> embeddings = aimlEmbeddingClient.buildEmbeddings(
-                savedChunks.stream().map(TextChunk::getContent).toList()
-        );
-
-        int paired = Math.min(savedChunks.size(), embeddings.size());
-        if (paired < savedChunks.size()) {
-            log.warn("Only {} embedding(s) generated for {} chunk(s) of rawNoteId={}. Some chunks were not upserted to Pinecone.",
-                    paired, savedChunks.size(), rawNoteId);
-        }
-        for (int i = 0; i < paired; i++) {
-            vectorStoreService.upsertChunkEmbedding(savedChunks.get(i), embeddings.get(i));
-        }
-
-        log.info("Processed {} chunk(s) for rawNoteId={} and attempted Pinecone upsert for {} embedding(s).",
-                savedChunks.size(), rawNoteId, paired);
     }
+
+    private NotionPageContent findPage(Long rawNoteId) {
+        return pageRepo.findById(rawNoteId)
+                .orElseThrow(() -> new IllegalArgumentException("NotionPageContent not found: " + rawNoteId));
+    }
+    
+    private List<TextChunk> createAndSaveChunks(NotionPageContent page) {
+        List<String> contents = chunker.chunk(page.getContent());
+
+        List<TextChunk> saved = new java.util.ArrayList<>();
+        int index = 0;
+
+        for (String content : contents) {
+            saved.add(saveChunk(page, content, index++));
+        }
+
+        return saved;
+    }
+
+    private TextChunk saveChunk(NotionPageContent page, String content, int index) {
+        TextChunk chunk = new TextChunk();
+        chunk.setRawNoteId(page.getId());
+        chunk.setAppUserId(page.getAppUserId());
+        chunk.setChunkIndex(index);
+        chunk.setContent(content);
+
+        return chunkRepo.save(chunk);
+    }
+
+    private List<List<Double>> generateEmbeddings(List<TextChunk> chunks) {
+        List<String> contents = chunks.stream()
+                .map(TextChunk::getContent)
+                .toList();
+
+        return aimlEmbeddingClient.buildEmbeddings(contents);
+    }
+
+    private void upsertEmbeddings(Long rawNoteId, List<TextChunk> chunks, List<List<Double>> embeddings) {
+        int paired = Math.min(chunks.size(), embeddings.size());
+
+        logIfMismatch(rawNoteId, chunks.size(), paired);
+
+        for (int i = 0; i < paired; i++) {
+            vectorStoreService.upsertChunkEmbedding(chunks.get(i), embeddings.get(i));
+        }
+    }
+
+    private void logIfMismatch(Long rawNoteId, int total, int paired) {
+        if (paired < total) {
+            log.warn("Only {} embedding(s) generated for {} chunk(s) of rawNoteId={}.",
+                    paired, total, rawNoteId);
+        }
+    }
+
+    private void logSuccess(Long rawNoteId, int chunks, int embeddings) {
+        log.info("Processed {} chunk(s) for rawNoteId={} and upserted {} embeddings.",
+                chunks, rawNoteId, embeddings);
+    }
+
+
 }

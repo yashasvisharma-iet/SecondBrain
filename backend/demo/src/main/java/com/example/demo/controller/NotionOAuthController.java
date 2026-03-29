@@ -56,7 +56,7 @@ public class NotionOAuthController {
             return;
         }
 
-        ingestRecentPages(user, workspaceId);
+        ingestMultiplePages(user, workspaceId);
     }
 
     private boolean hasValidPageId(String pageId) {
@@ -71,11 +71,11 @@ public class NotionOAuthController {
         }
     }
 
-    private void ingestRecentPages(AppUser user, String workspaceId) {
+    private void ingestMultiplePages(AppUser user, String workspaceId) {
         try {
-            ingestionService.ingestRecentPages(user, workspaceId, 5);
+            ingestionService.ingestMultiplePages(user, workspaceId, 5);
         } catch (Exception e) {
-            logError("Ingestion of recent pages after OAuth failed", e);
+            logError("Ingestion of multiple pages after OAuth failed", e);
         }
     }
 
