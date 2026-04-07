@@ -3,8 +3,9 @@ package com.example.demo.controller;
 import com.example.demo.entity.AppUser;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.repository.NotionPageContentRepository;
-import com.example.demo.service.GoogleDocsIngestionService;
 import com.example.demo.service.auth.CurrentUserService;
+import com.example.demo.service.ingestion.GoogleDocsIngestionService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

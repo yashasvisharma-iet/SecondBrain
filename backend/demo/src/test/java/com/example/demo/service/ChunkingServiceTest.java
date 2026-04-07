@@ -4,6 +4,11 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+import com.example.demo.service.chunkingAndEmbedding.AimlEmbeddingClient;
+import com.example.demo.service.chunkingAndEmbedding.ChunkingService;
+import com.example.demo.service.chunkingAndEmbedding.PineconeVectorStoreService;
+import com.example.demo.service.chunkingAndEmbedding.TextChunker;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

@@ -1,10 +1,11 @@
 package com.example.demo.controller;
 
 import com.example.demo.entity.AppUser;
-import com.example.demo.service.NotionOAuthService;
+import com.example.demo.service.UserService;
+import com.example.demo.service.auth.NotionOAuthService;
 
-import com.example.demo.service.auth.UserService;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
@@ -20,16 +21,17 @@ import java.util.Map;
 public class NotionOAuthController {
 
     private final NotionOAuthService notionOAuthService;
-    private final com.example.demo.service.NotionIngestionService ingestionService;
+    private final com.example.demo.service.ingestion.NotionIngestionService ingestionService;
     private final UserService currentUserService;
 
     public NotionOAuthController(NotionOAuthService notionOAuthService,
-                                 com.example.demo.service.NotionIngestionService ingestionService,
+                                 com.example.demo.service.ingestion.NotionIngestionService ingestionService,
                                  UserService currentUserService) {
         this.notionOAuthService = notionOAuthService;
         this.ingestionService = ingestionService;
         this.currentUserService = currentUserService;
     }
+    private Logger logger = LoggerFactory.getLogger(NotionOAuthController.class);
 
     @PostMapping("/callback")
     public ResponseEntity<Void> handleOAuthCallback(
@@ -41,13 +43,14 @@ public class NotionOAuthController {
             return ResponseEntity.badRequest().build();
         }
 
-        AppUser appUser = currentUserService.SaveUserToDB(principal);
+        AppUser appUser = currentUserService.getOrCreateProfile(principal);
         String workspaceId = notionOAuthService.exchangeAuthorizationCodeForNotionToken(code, appUser);
 
         processIngestion(body, appUser, workspaceId);
-
+        logger.info(NotionOAuthController.class.getSimpleName() + " - OAuth callback processed successfully for user: " + appUser.getEmail());
         return ResponseEntity.ok().build();
     }
+
     private void processIngestion(Map<String, String> body, AppUser user, String workspaceId) {
         String pageId = body.get("pageId");
 
@@ -57,6 +60,7 @@ public class NotionOAuthController {
         }
 
         ingestMultiplePages(user, workspaceId);
+        
     }
 
     private boolean hasValidPageId(String pageId) {
@@ -77,10 +81,11 @@ public class NotionOAuthController {
         } catch (Exception e) {
             logError("Ingestion of multiple pages after OAuth failed", e);
         }
+        logger.info("Ingested multiple pages for user: " + user.getEmail());
     }
 
     private void logError(String message, Exception e) {
-        System.err.println(message + ": " + e.getMessage());
+        logger.error(message + ": " + e.getMessage(), e);
     }
 
 }

@@ -5,8 +5,9 @@ import com.example.demo.dto.GraphDataDto;
 import com.example.demo.dto.GraphEdgeDto;
 import com.example.demo.dto.GraphNodeDto;
 import com.example.demo.entity.AppUser;
-import com.example.demo.service.GraphService;
 import com.example.demo.service.auth.CurrentUserService;
+import com.example.demo.service.graph.GraphService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

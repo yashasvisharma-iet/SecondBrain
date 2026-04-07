@@ -3,9 +3,10 @@ package com.example.demo.controller;
 import com.example.demo.entity.AppUser;
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.repository.NotionPageContentRepository;
-import com.example.demo.service.ChunkingService;
-import com.example.demo.service.NotionIngestionService;
 import com.example.demo.service.auth.CurrentUserService;
+import com.example.demo.service.chunkingAndEmbedding.ChunkingService;
+import com.example.demo.service.ingestion.NotionIngestionService;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

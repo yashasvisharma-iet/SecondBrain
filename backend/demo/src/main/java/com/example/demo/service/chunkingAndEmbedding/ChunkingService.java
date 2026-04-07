@@ -1,9 +1,10 @@
-package com.example.demo.service;
+package com.example.demo.service.chunkingAndEmbedding;
 
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;

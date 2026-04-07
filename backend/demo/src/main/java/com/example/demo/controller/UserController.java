@@ -3,7 +3,8 @@ package com.example.demo.controller;
 import com.example.demo.dto.UserDto;
 import com.example.demo.entity.AppUser;
 import com.example.demo.repository.NotionTokenRepository;
-import com.example.demo.service.auth.UserService;
+import com.example.demo.service.UserService;
+
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -25,7 +26,7 @@ public class UserController {
 
     @GetMapping("/me")
     public UserDto currentUser(@AuthenticationPrincipal OAuth2User principal) {
-        AppUser user = userService.SaveUserToDB(principal);
+        AppUser user = userService.getOrCreateProfile(principal);
         boolean notionConnected = notionTokenRepository.existsByAppUserId(user.getId());
         return new UserDto(
                 user.getId(),

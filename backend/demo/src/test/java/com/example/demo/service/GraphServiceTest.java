@@ -7,6 +7,10 @@ import com.example.demo.entity.NotionPageContent;
 import com.example.demo.entity.TextChunk;
 import com.example.demo.repository.NotionPageContentRepository;
 import com.example.demo.repository.TextChunkRepository;
+import com.example.demo.service.chunkingAndEmbedding.AimlEmbeddingClient;
+import com.example.demo.service.chunkingAndEmbedding.PineconeVectorStoreService;
+import com.example.demo.service.graph.GraphService;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;

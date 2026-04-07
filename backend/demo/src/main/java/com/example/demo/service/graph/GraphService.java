@@ -1,16 +1,4 @@
-package com.example.demo.service;
-
-import com.example.demo.dto.AgentQueryResponse;
-import com.example.demo.dto.GraphDataDto;
-import com.example.demo.dto.GraphEdgeDto;
-import com.example.demo.dto.GraphNodeDto;
-import com.example.demo.entity.NotionPageContent;
-import com.example.demo.entity.TextChunk;
-import com.example.demo.repository.NotionPageContentRepository;
-import com.example.demo.repository.TextChunkRepository;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.stereotype.Service;
+package com.example.demo.service.graph;
 
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +13,21 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.stereotype.Service;
+
+import com.example.demo.dto.AgentQueryResponse;
+import com.example.demo.dto.GraphDataDto;
+import com.example.demo.dto.GraphEdgeDto;
+import com.example.demo.dto.GraphNodeDto;
+import com.example.demo.entity.NotionPageContent;
+import com.example.demo.entity.TextChunk;
+import com.example.demo.repository.NotionPageContentRepository;
+import com.example.demo.repository.TextChunkRepository;
+import com.example.demo.service.chunkingAndEmbedding.AimlEmbeddingClient;
+import com.example.demo.service.chunkingAndEmbedding.PineconeVectorStoreService;
 
 @Service
 public class GraphService {

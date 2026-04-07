@@ -1,4 +1,4 @@
-package com.example.demo.service.auth;
+package com.example.demo.service;
 
 import com.example.demo.dto.GoogleProfileUser;
 import com.example.demo.entity.AppUser;
@@ -9,17 +9,20 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class UserService {
 
     private final UserRepository userRepository;
+    private Logger logger = LoggerFactory.getLogger(UserService.class);
 
     public UserService(UserRepository userRepository) {
         this.userRepository = userRepository;
     }
 
-    public AppUser SaveUserToDB(OAuth2User principal) {
+    public AppUser getOrCreateProfile(OAuth2User principal) {
         if (principal == null) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Please sign in with Google to access your Second Brain.");
         }
@@ -27,8 +30,9 @@ public class UserService {
         GoogleProfileUser profile = extractGoogleProfile(principal);
         
         AppUser user = syncUserWithProfile(profile);
-
-        return userRepository.save(user);
+        user = userRepository.save(user);
+        logger.info("User saved/updated in DB: " + user.getEmail());
+        return user;
     }
  
     private GoogleProfileUser extractGoogleProfile(OAuth2User principal) {
@@ -40,7 +44,7 @@ public class UserService {
         if (userId == null || userId.isBlank() || email == null || email.isBlank()) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incomplete Google account details.");
         }
-
+        logger.info("Extracted Google profile - userId: " + userId + ", email: " + email);
         return new GoogleProfileUser(userId, email, name, avatarUrl);
     }
 

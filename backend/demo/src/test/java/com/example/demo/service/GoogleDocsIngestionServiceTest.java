@@ -2,6 +2,9 @@ package com.example.demo.service;
 
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.repository.NotionPageContentRepository;
+import com.example.demo.service.chunkingAndEmbedding.ChunkingService;
+import com.example.demo.service.ingestion.GoogleDocsIngestionService;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;

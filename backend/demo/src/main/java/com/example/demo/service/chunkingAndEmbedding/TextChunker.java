@@ -1,4 +1,4 @@
-package com.example.demo.service;
+package com.example.demo.service.chunkingAndEmbedding;
 
 import org.springframework.stereotype.Component;
 

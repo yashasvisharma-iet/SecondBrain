@@ -1,4 +1,4 @@
-package com.example.demo.service;
+package com.example.demo.service.chunkingAndEmbedding;
 
 import com.example.demo.dto.GraphEdgeDto;
 import com.example.demo.entity.TextChunk;

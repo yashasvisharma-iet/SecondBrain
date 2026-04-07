@@ -1,7 +1,8 @@
-package com.example.demo.service;
+package com.example.demo.service.ingestion;
 
 import com.example.demo.entity.NotionPageContent;
 import com.example.demo.repository.NotionPageContentRepository;
+import com.example.demo.service.chunkingAndEmbedding.ChunkingService;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpEntity;

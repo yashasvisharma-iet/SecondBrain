@@ -3,8 +3,8 @@ package com.example.demo.controller;
 import com.example.demo.dto.NoteContentDto;
 import com.example.demo.entity.AppUser;
 import com.example.demo.repository.NotionPageContentRepository;
-import com.example.demo.service.GoogleDocsIngestionService;
-import com.example.demo.service.auth.UserService;
+import com.example.demo.service.UserService;
+import com.example.demo.service.ingestion.GoogleDocsIngestionService;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -60,7 +60,7 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.badRequest().body("docId is required");
         }
 
-        AppUser user = currentUserService.SaveUserToDB(principal);
+        AppUser user = currentUserService.getOrCreateProfile(principal);
         ingestionService.ingestDoc(user.getId(), docId, authorizedClient.getAccessToken().getTokenValue());
         return ResponseEntity.ok("Google Doc ingested successfully for docId=" + docId);
     }
@@ -75,7 +75,7 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.badRequest().body("docId and content are required");
         }
 
-        AppUser user = currentUserService.SaveUserToDB(principal);
+        AppUser user = currentUserService.getOrCreateProfile(principal);
         ingestionService.ingestRawContent(user.getId(), docId, content);
         return ResponseEntity.ok("Raw Google Doc content ingested for docId=" + docId);
     }
@@ -83,7 +83,7 @@ public class GoogleDocsIngestionController {
     @GetMapping("/doc/{docId}")
     public ResponseEntity<NoteContentDto> getDocByDocId(@AuthenticationPrincipal OAuth2User principal,
                                                         @PathVariable String docId) {
-        AppUser user = currentUserService.SaveUserToDB(principal);
+        AppUser user = currentUserService.getOrCreateProfile(principal);
         String pageId = GOOGLE_DOC_PREFIX + docId;
         return pageRepository.findByPageIdAndAppUserId(pageId, user.getId())
                 .map(page -> ResponseEntity.ok(new NoteContentDto(page.getPageId(), page.getContent())))
@@ -97,7 +97,7 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.status(401).body("Google account is not connected");
         }
 
-        currentUserService.SaveUserToDB(principal);
+        currentUserService.getOrCreateProfile(principal);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(authorizedClient.getAccessToken().getTokenValue());
@@ -137,7 +137,7 @@ public class GoogleDocsIngestionController {
             return ResponseEntity.badRequest().body("docIds are required");
         }
 
-        AppUser user = currentUserService.SaveUserToDB(principal);
+        AppUser user = currentUserService.getOrCreateProfile(principal);
         String accessToken = authorizedClient.getAccessToken().getTokenValue();
         for (String docId : docIds) {
             if (docId != null && !docId.isBlank()) {
